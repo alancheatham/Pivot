@@ -6,6 +6,7 @@
 -----------------------------------------------------------------------------------------
 
 local composer = require( "composer" )
+local json = require('json')
 local scene = composer.newScene()
 
 -- include Corona's "physics" library
@@ -15,6 +16,8 @@ physics.setGravity(0, 0)
 -- physics.setDrawMode('hybrid')
 
 local animation = require("plugin.animation")
+local explosion = system.pathForFile('explosion.json', system.DocumentsDirectory)
+local t = json.decodeFile(explosion)
 
 -- Global device specific coordinates
 local W = display.contentWidth
@@ -22,23 +25,54 @@ local H = display.contentHeight
 
 --------------------------------------------
 
-local startCircle
+local saveData
+local highScore
+
+local filePath = system.pathForFile("saveData.json", system.DocumentsDirectory)
+local file = io.open( filePath, "r" )
+
+if file then
+	local contents = file:read( "*a" )
+	io.close( file )
+	saveData = json.decode( contents )
+end
+
+if ( saveData == nil ) then
+	saveData = { highScore = 0 }
+end
+
+highScore = saveData.highScore
+
+--------------------------------------------
+
+local group = display.newGroup()
+local ammoGroup = display.newGroup()
+local activeCircleGroup
+local gameOverGroup = display.newGroup()
+
 local background = nil
+local physicsBackground = nil
 local score = 1
-local scoreText = nil
+local ammo = 3
 local circles = {}
 local laser = nil
-local group = display.newGroup()
-local activeCircleGroup
 local cannon = nil
 local cannonAnimation = nil
 local slowCannonAnimation = nil
-
+local bulletFlying = false
 local yOffset = 0
+
+local scoreText = nil
+local gameOverText = nil
+local highScoreText = nil
+local highScoreScoreText = nil
+local playAgainText = nil
 
 function addPhysics (circle)
 	physics.addBody(circle, 'dynamic')
-	circle:setLinearVelocity(100, 0)
+	if (score > 10) then
+		circle:setLinearVelocity(score * 10, 0)
+	end
 end
 
 function drawCircle (y, disablePhysics)
@@ -63,10 +97,9 @@ end
 function drawLaser (circle)
 	laser = display.newLine(circle.x, circle.y, circle.x, circle.y - 1000)
 	laser.strokeWidth = 2
-	laser.rotation = 30
+	laser.rotation = 35
 	laser:setStrokeColor(0, 156/255, 234/255)
 	group:insert(laser)
-	laser:toBack()
 end
 
 function activateCircle (circle)
@@ -91,8 +124,8 @@ function activateCircle (circle)
 	activeCircleGroup.rotation = 35
 
 	group:insert(activeCircleGroup)
-	animation.to(activeCircleGroup, { rotation = -35 }, { speedScale = 0.18 + score / 20, iterations=-1, easing = easing.inOutSine, reflect=true })
-	animation.to(laser, { rotation = -35 }, { speedScale = 0.18 + score / 20, iterations=-1, easing = easing.inOutSine, reflect=true })
+	animation.to(activeCircleGroup, { rotation = -35 }, { speedScale = math.min(0.18 + score / 20, 1.2), iterations=-1, easing = easing.inOutSine, reflect=true })
+	animation.to(laser, { rotation = -35 }, { speedScale = math.min(0.18 + score / 20, 1.2), iterations=-1, easing = easing.inOutSine, reflect=true })
 
 	transition.to(circle.fill, { r = 0, g = 156 / 255, b = 234 / 255, a = 1, time=600, transition=easing.inCubic })
 	slowCannonAnimation = animation.to(cannon, { y = cannon.y - 27 }, { time = 800 })
@@ -105,7 +138,24 @@ function removeOldCircle ()
 	end
 end
 
+function drawAmmo ()
+	while ammoGroup.numChildren > 0 do
+		local child = ammoGroup[1]
+		if child then child:removeSelf() end
+	end
+
+	for i=1,ammo  do
+		local ammoRect = display.newRoundedRect(10 + 14 * i, 60, 8, 30, 8)
+		ammoRect:setFillColor(0, 156/255, 234/255)
+		ammoGroup:insert(ammoRect)
+	end
+end
+
 function onCircleCollision (event)
+	if (event.other == physicsBackground) then return end
+
+	timer.performWithDelay(400, function () bulletFlying = false end )
+
 	display.remove(event.other)
 	display.remove(laser)
 
@@ -114,6 +164,7 @@ function onCircleCollision (event)
 
 	yOffset = yOffset + circles[score].y - circles[score + 1].y
 	transition.to(group, { y = yOffset, time = 600, transition=easing.outSine })
+	transition.to(physicsBackground, { y = -yOffset, time = 600, transition=easing.outSine })
 	score = score + 1
 	scoreText.text = score - 1
 
@@ -125,48 +176,155 @@ function onCircleCollision (event)
 	activateCircle(circles[score])
 end
 
-function onScreenTouch ( event )
-	if ( event.phase == "began" ) then
-		local x, y = circles[score]:localToContent(0,0)
-		local fly = display.newRoundedRect(x, y - yOffset, 10, 50, 10)
+function onBulletCollision (event)
+	if (event.other == physicsBackground and event.phase == 'ended') then
+		bulletFlying = false
+		ammo = ammo - 1
 
-		if cannonAnimation ~= nil then
-			animation.setPosition(cannonAnimation, 200)
+		if (ammo < 0) then
+			gameOver()
+		else
+			drawAmmo()
 		end
+	end
+end
 
-		if cannonAnimation ~= nil then
-			animation.setPosition(slowCannonAnimation, 800)
-		end
-		cannonAnimation = animation.to(cannon, { y = 7 + cannon.y },{ iterations = 2, time = 100, reflect = true})
+function animateCannon()
+	local x, y = circles[score]:localToContent(0,0)
 
-		fly:setFillColor(0, 156/255, 234/255)
+	if cannonAnimation ~= nil then
+		animation.setPosition(cannonAnimation, 200)
+	end
 
-		fly.strokeWidth = 0
-		fly:setStrokeColor(0, 0, 0)
+	if cannonAnimation ~= nil then
+		animation.setPosition(slowCannonAnimation, 800)
+	end
 
-		group:insert(fly)
-		fly:toBack()
+	cannonAnimation = animation.to(cannon, { y = 7 + cannon.y },{ iterations = 2, time = 100, reflect = true})
+end
 
-		physics.addBody(fly, 'dynamic', { isSensor = true })
+function shootBullet ()
+	local x, y = circles[score]:localToContent(0,0)
+	local bullet = display.newRoundedRect(x, y - yOffset, 10, 50, 10)
 
-		local angle = activeCircleGroup.rotation
-		local flyAngle = (angle - 90) / 180 * math.pi
-		local flySpeed = 800
+	bullet:setFillColor(0, 156/255, 234/255)
 
-		fly.rotation = angle
-		fly:setLinearVelocity(flySpeed * math.cos(flyAngle), flySpeed * math.sin(flyAngle))
+	bullet.strokeWidth = 0
+	bullet:setStrokeColor(0, 0, 0)
+
+	group:insert(bullet)
+	bullet:toBack()
+	-- background:toBack()
+
+	-- display.newEmitter(t)
+
+	physics.addBody(bullet, 'dynamic', { isSensor = true })
+
+	local angle = activeCircleGroup.rotation
+	local flyAngle = (angle - 90) / 180 * math.pi
+	local flySpeed = 800 + score * 8
+
+	bullet.rotation = angle
+	bullet:setLinearVelocity(flySpeed * math.cos(flyAngle), flySpeed * math.sin(flyAngle))
+
+	bullet:addEventListener('collision', onBulletCollision)
+
+	bulletFlying = true
+end
+
+local function onScreenTouch ( event )
+	if ( event.phase == "began" and not bulletFlying) then
+		animateCannon()
+		shootBullet()
 	end
 	return true
+end
+
+
+-- for detecting when lasers leave the screen
+function createPhysicsBackground ()
+	physicsBackground = display.newRect(0, 0, W, H)
+	physicsBackground.anchorX = 0
+	physicsBackground.anchorY = 0
+	physicsBackground.x = 0 + display.screenOriginX
+	physicsBackground.y = 0 + display.screenOriginY
+	physicsBackground.alpha = 0
+
+	physics.addBody(physicsBackground, 'static', { isSensor = true })
+	group:insert(physicsBackground)
 end
 
 function everyFrame (event)
 	if (circles[score + 1] == nil) then return end
 
 	if (circles[score + 1].x > W - 30) then
-		circles[score + 1]:setLinearVelocity(-100)
+		circles[score + 1]:setLinearVelocity(-score * 10, 0)
 	elseif (circles[score + 1].x < 30) then
-		circles[score + 1]:setLinearVelocity(100)
+		circles[score + 1]:setLinearVelocity(score * 10, 0)
 	end
+end
+
+function gameOver ()
+	if (score - 1 > highScore) then
+		saveHighScore()
+		highScoreText.alpha = 1
+		highScoreScoreText.text = 'High Score: ' .. highScore
+	else
+		highScoreText.alpha = 0
+	end
+
+	ammoGroup.alpha = 0
+	background:removeEventListener('touch', onScreenTouch)
+	transition.fadeOut(group, { time=1000 })
+	timer.performWithDelay(1000, function () transition.fadeIn(gameOverGroup, { time=1000 }) end)
+	timer.performWithDelay(1500, function () playAgainText:addEventListener('touch', initGame) end)
+end
+
+function initGame ()
+	while group.numChildren > 0 do
+		local child = group[1]
+		if child then child:removeSelf() end
+	end
+
+	score = 1
+	circles = {}
+	laser = nil
+	ammo = 3
+	yOffset = 0
+	bulletFlying = false
+
+	scoreText.text = score - 1
+
+	group.y = 0
+
+	createPhysicsBackground()
+	drawCircle(H - 80, true)
+	drawCircle(130)
+
+	drawLaser(circles[score])
+	drawAmmo()
+
+	playAgainText:removeEventListener('touch', initGame)
+	timer.performWithDelay(1000, function () background:addEventListener('touch', onScreenTouch) end)
+
+	activateCircle(circles[score])
+
+	transition.fadeOut(gameOverGroup, { time = 500 })
+	timer.performWithDelay(500, function () transition.fadeIn(group, { time=1000 }) end)
+	timer.performWithDelay(500, function () transition.fadeIn(ammoGroup, { time=1000 }) end)
+	transition.to(background.fill, { r = 169/255, g = 1, b = 172/255, a = 1, time=1000, transition=easing.inCubic })
+	highScoreText.alpha = 0
+end
+
+function saveHighScore()
+	local file = io.open( filePath, "w" )
+	highScore = score - 1
+	saveData.highScore = highScore
+
+	if file then
+		file:write( json.encode( saveData ) )
+        io.close( file )
+    end
 end
 
 --------------------------------------------
@@ -180,7 +338,6 @@ function scene:create( event )
 	-- INSERT code here to initialize the scene
 	-- e.g. add display objects to 'sceneGroup', add touch listeners, etc.
 
-	-- display a background image
 	background = display.newRect(0, 0, W, H)
 	background.anchorX = 0
 	background.anchorY = 0
@@ -188,21 +345,35 @@ function scene:create( event )
 	background.y = 0 + display.screenOriginY
 
 	background:setFillColor(169/255, 253/255, 172/255)
+	sceneGroup:insert(background)
 
-	background:addEventListener('touch', onScreenTouch )
-
-
-	-- create/position logo/title image on upper-half of the screen
-	-- all display objects must be inserted into group
-    sceneGroup:insert( background )
-
-	drawCircle(H - 80, true)
-	drawCircle(120)
-
-	drawLaser(circles[score])
-
-	scoreText = display.newText('0', W / 2, 60, native.systemFont, 30)
+	scoreText = display.newText('0', W / 2, 60, native.systemFont, 40)
 	scoreText:setFillColor(black)
+
+	gameOverText = display.newText('0', W / 2, 200, native.systemFont, 40)
+	gameOverText.text = 'GAME OVER'
+	gameOverText:setFillColor(black)
+
+	highScoreText = display.newText('0', W / 2, 130, native.systemFont, 30)
+	highScoreText.text = 'HIGH SCORE!'
+	highScoreText:setFillColor(0, 156/255, 234/255)
+
+	highScoreScoreText = display.newText('0', W / 2, H - 130, native.systemFont, 30)
+	highScoreScoreText.text = 'High Score: ' .. highScore
+	highScoreScoreText:setFillColor(0, 156/255, 234/255)
+
+	playAgainText = display.newText('0', W / 2, H - 60, native.systemFont, 30)
+	playAgainText.text = 'Play Again'
+	playAgainText:setFillColor(black)
+
+	gameOverGroup:insert(gameOverText)
+	gameOverGroup:insert(highScoreText)
+	gameOverGroup:insert(highScoreScoreText)
+	gameOverGroup:insert(playAgainText)
+
+	gameOverGroup.alpha = 0
+
+	initGame()
 end
 
 Runtime:addEventListener('enterFrame', everyFrame)
@@ -219,7 +390,6 @@ function scene:show( event )
 		-- INSERT code here to make the scene come alive
         -- e.g. start timers, begin animation, play audio, etc.
 
-		activateCircle(circles[score])
 	end
 end
 
@@ -244,11 +414,6 @@ function scene:destroy( event )
 	--
 	-- INSERT code here to cleanup the scene
     -- e.g. remove display objects, remove touch listeners, save state, etc.
-
-	if playBtn then
-		playBtn:removeSelf()	-- widgets must be manually removed
-		playBtn = nil
-	end
 end
 
 ---------------------------------------------------------------------------------

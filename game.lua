@@ -71,7 +71,14 @@ local playAgainText = nil
 function addPhysics (circle)
 	physics.addBody(circle, 'dynamic')
 	if (score > 10) then
-		circle:setLinearVelocity(score * 10, 0)
+		local direction
+		if (math.random(0,1) == 1) then
+			direction = score
+		else
+			direction = -score
+		end
+
+		circle:setLinearVelocity(direction * 10, 0)
 	end
 end
 
@@ -81,15 +88,24 @@ function drawCircle (y, disablePhysics)
 	if x > 0.8 then x = 0.8 end
 
     local circle = display.newCircle(W * x, y, 30)
-	circle:setFillColor(193/255, 71/255, 106/255)
 	circle.strokeWidth = 5
 	circle:setStrokeColor(0, 0, 0)
+	circle:setFillColor(0, 156/255, 234/255)
 
 	group:insert(circle)
 
 	if not disablePhysics then
+		circle:setFillColor(1,0,0)
+		circle:scale(0.5, 0.5)
+		transition.scaleTo(circle, { xScale=1, yScale=1, time=1800 })
 		timer.performWithDelay(100, function () addPhysics(circle) end)
+		timer.performWithDelay(1800, function ()
+			if (circle == circles[score + 1]) then
+				circle:setFillColor(193/255, 71/255, 106/255)
+			end
+		end)
 	end
+
 	table.insert(circles, circle)
 	circle:addEventListener('collision', onCircleCollision)
 end
@@ -298,7 +314,7 @@ function initGame ()
 	group.y = 0
 
 	createPhysicsBackground()
-	drawCircle(H - 80, true)
+	drawCircle(H - 60, true)
 	drawCircle(130)
 
 	drawLaser(circles[score])

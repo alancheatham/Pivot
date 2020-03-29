@@ -25,6 +25,7 @@ local H = display.contentHeight
 
 --------------------------------------------
 
+-- persistent data
 local saveData
 local highScore
 
@@ -54,6 +55,8 @@ local background = nil
 local physicsBackground = nil
 local score = 1
 local ammo = 3
+local partialAmmo = 0
+local isGrowing = false
 local circles = {}
 local laser = nil
 local cannon = nil
@@ -82,7 +85,7 @@ function addPhysics (circle)
 	end
 end
 
-function drawCircle (y, disablePhysics)
+function drawCircle (y, firstCircle)
 	local x = math.random()
 	if x < 0.2 then x = 0.2 end
 	if x > 0.8 then x = 0.8 end
@@ -93,8 +96,9 @@ function drawCircle (y, disablePhysics)
 	circle:setFillColor(0, 156/255, 234/255)
 
 	group:insert(circle)
+	isGrowing = true
 
-	if not disablePhysics then
+	if not firstCircle then
 		circle:setFillColor(1,0,0)
 		circle:scale(0.5, 0.5)
 		transition.scaleTo(circle, { xScale=1, yScale=1, time=1800 })
@@ -102,6 +106,7 @@ function drawCircle (y, disablePhysics)
 		timer.performWithDelay(1800, function ()
 			if (circle == circles[score + 1]) then
 				circle:setFillColor(193/255, 71/255, 106/255)
+				isGrowing = false
 			end
 		end)
 	end
@@ -165,6 +170,12 @@ function drawAmmo ()
 		ammoRect:setFillColor(0, 156/255, 234/255)
 		ammoGroup:insert(ammoRect)
 	end
+
+	for i=1,partialAmmo  do
+		local partialAmmoRect = display.newRoundedRect(10 + 14 * (ammo + 1), 78 - 10 * i, 8, 14, 8)
+		partialAmmoRect:setFillColor(112/255, 207/255, 255/255)
+		ammoGroup:insert(partialAmmoRect)
+	end
 end
 
 function onCircleCollision (event)
@@ -174,6 +185,18 @@ function onCircleCollision (event)
 
 	display.remove(event.other)
 	display.remove(laser)
+
+	if (isGrowing) then
+		isGrowing = false
+
+		if (partialAmmo == 2) then
+			ammo = ammo + 1
+			partialAmmo = 0
+		else
+			partialAmmo = partialAmmo + 1
+		end
+		drawAmmo()
+	end
 
 	event.target:setLinearVelocity(0,0)
 	event.target:removeEventListener('collision', onCircleCollision)
@@ -292,7 +315,7 @@ function gameOver ()
 	ammoGroup.alpha = 0
 	background:removeEventListener('touch', onScreenTouch)
 	transition.fadeOut(group, { time=1000 })
-	timer.performWithDelay(1000, function () transition.fadeIn(gameOverGroup, { time=1000 }) end)
+	timer.performWithDelay(1000, function () transition.fadeIn(gameOverGroup, { time=600 }) end)
 	timer.performWithDelay(1500, function () playAgainText:addEventListener('touch', initGame) end)
 end
 
@@ -306,6 +329,7 @@ function initGame ()
 	circles = {}
 	laser = nil
 	ammo = 3
+	partialAmmo = 0
 	yOffset = 0
 	bulletFlying = false
 

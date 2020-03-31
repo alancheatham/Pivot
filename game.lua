@@ -72,6 +72,8 @@ local highScoreText = nil
 local highScoreScoreText = nil
 local playAgainText = nil
 
+local GROWING_TIME = math.max(1200, 2400 - score * 100)
+
 function addPhysics (circle)
 	physics.addBody(circle, 'dynamic')
 
@@ -104,16 +106,18 @@ function drawCircle (y, firstCircle)
 	isGrowing = true
 
 	if not firstCircle then
+		local GROWING_TIME = math.max(1500, 2400 - score * 50)
+
 		circle:setFillColor(1,0,0)
 		circle:scale(0.5, 0.5)
-		transition.scaleTo(circle, { xScale=1, yScale=1, time=1800 })
+		transition.scaleTo(circle, { xScale=1, yScale=1, time=GROWING_TIME })
 
 		partialAmmoRect = display.newRoundedRect(circle.x, circle.y, 8, 14, 8)
 		group:insert(partialAmmoRect)
 		partialAmmoRect:setFillColor(112/255, 207/255, 255/255)
 
 		timer.performWithDelay(100, function () addPhysics(circle) end)
-		timer.performWithDelay(1800, function ()
+		timer.performWithDelay(GROWING_TIME, function ()
 			if (circle == circles[score + 1]) then
 				circle:setFillColor(193/255, 71/255, 106/255)
 				isGrowing = false
@@ -158,12 +162,14 @@ function activateCircle (circle)
 	activeCircleGroup:insert(circlePlaceholder)
 	activeCircleGroup.rotation = 35
 
-	group:insert(activeCircleGroup)
-	animation.to(activeCircleGroup, { rotation = -35 }, { speedScale = math.min(0.18 + score / 20, 1.2), iterations=-1, easing = easing.inOutSine, reflect=true })
-	animation.to(laser, { rotation = -35 }, { speedScale = math.min(0.18 + score / 20, 1.2), iterations=-1, easing = easing.inOutSine, reflect=true })
+	local ROTATION_SPEED = math.min(0.1 + score / 20, 1.2)
 
-	transition.to(circle.fill, { r = 0, g = 156 / 255, b = 234 / 255, a = 1, time=600, transition=easing.inCubic })
-	slowCannonAnimation = animation.to(cannon, { y = cannon.y - 27 }, { time = 800 })
+	group:insert(activeCircleGroup)
+	animation.to(activeCircleGroup, { rotation=-35 }, { speedScale=ROTATION_SPEED, iterations=-1, easing=easing.inOutSine, reflect=true })
+	animation.to(laser, { rotation=-35 }, { speedScale=ROTATION_SPEED, iterations=-1, easing=easing.inOutSine, reflect=true })
+
+	transition.to(circle.fill, { r=0, g=156/255, b=234/255, a=1, time=600, transition=easing.inCubic })
+	slowCannonAnimation = animation.to(cannon, { y=cannon.y - 27 }, { time=800 })
 end
 
 function removeOldCircle ()

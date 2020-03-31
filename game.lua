@@ -60,6 +60,7 @@ local isGrowing = false
 local circles = {}
 local laser = nil
 local cannon = nil
+local partialAmmoRect
 local cannonAnimation = nil
 local slowCannonAnimation = nil
 local bulletFlying = false
@@ -73,7 +74,10 @@ local playAgainText = nil
 
 function addPhysics (circle)
 	physics.addBody(circle, 'dynamic')
+
 	if (score > 10) then
+		physics.addBody(partialAmmoRect, 'kinematic', { isSensor=true })
+
 		local direction
 		if (math.random(0,1) == 1) then
 			direction = score
@@ -82,6 +86,7 @@ function addPhysics (circle)
 		end
 
 		circle:setLinearVelocity(direction * 10, 0)
+		partialAmmoRect:setLinearVelocity(direction * 10, 0)
 	end
 end
 
@@ -102,11 +107,20 @@ function drawCircle (y, firstCircle)
 		circle:setFillColor(1,0,0)
 		circle:scale(0.5, 0.5)
 		transition.scaleTo(circle, { xScale=1, yScale=1, time=1800 })
+
+		partialAmmoRect = display.newRoundedRect(circle.x, circle.y, 8, 14, 8)
+		group:insert(partialAmmoRect)
+		partialAmmoRect:setFillColor(112/255, 207/255, 255/255)
+
 		timer.performWithDelay(100, function () addPhysics(circle) end)
 		timer.performWithDelay(1800, function ()
 			if (circle == circles[score + 1]) then
 				circle:setFillColor(193/255, 71/255, 106/255)
 				isGrowing = false
+				partialAmmoRect.alpha = 0
+				if (partialAmmoRect.isBodyActive) then
+					physics.removeBody(partialAmmoRect)
+				end
 			end
 		end)
 	end
@@ -172,14 +186,14 @@ function drawAmmo ()
 	end
 
 	for i=1,partialAmmo  do
-		local partialAmmoRect = display.newRoundedRect(10 + 14 * (ammo + 1), 78 - 10 * i, 8, 14, 8)
-		partialAmmoRect:setFillColor(112/255, 207/255, 255/255)
-		ammoGroup:insert(partialAmmoRect)
+		local fixedPartialAmmoRect = display.newRoundedRect(10 + 14 * (ammo + 1), 78 - 10 * i, 8, 14, 8)
+		fixedPartialAmmoRect:setFillColor(112/255, 207/255, 255/255)
+		ammoGroup:insert(fixedPartialAmmoRect)
 	end
 end
 
 function onCircleCollision (event)
-	if (event.other == physicsBackground) then return end
+	if (event.other == physicsBackground or event.other == partialAmmoRect) then return end
 
 	timer.performWithDelay(400, function () bulletFlying = false end )
 
@@ -188,6 +202,10 @@ function onCircleCollision (event)
 
 	if (isGrowing) then
 		isGrowing = false
+		group:remove(partialAmmoRect)
+		ammoGroup:insert(partialAmmoRect)
+		partialAmmoRect.y = event.target.y + yOffset
+		transition.to(partialAmmoRect, { x=10 + 14 * (ammo + 1), y=78 - 10 * (partialAmmo + 1), time=500, transition=easing.outCubic })
 
 		if (partialAmmo == 2) then
 			ammo = ammo + 1
@@ -195,7 +213,7 @@ function onCircleCollision (event)
 		else
 			partialAmmo = partialAmmo + 1
 		end
-		drawAmmo()
+		timer.performWithDelay(500, drawAmmo)
 	end
 
 	event.target:setLinearVelocity(0,0)
@@ -220,7 +238,7 @@ function onBulletCollision (event)
 		bulletFlying = false
 		ammo = ammo - 1
 
-		if (ammo < 0) then
+		if (ammo < 1) then
 			gameOver()
 		else
 			drawAmmo()
@@ -298,8 +316,14 @@ function everyFrame (event)
 
 	if (circles[score + 1].x > W - 30) then
 		circles[score + 1]:setLinearVelocity(-score * 10, 0)
+		if (partialAmmoRect.isBodyActive) then
+			partialAmmoRect:setLinearVelocity(-score * 10, 0)
+		end
 	elseif (circles[score + 1].x < 30) then
 		circles[score + 1]:setLinearVelocity(score * 10, 0)
+		if (partialAmmoRect.isBodyActive) then
+			partialAmmoRect:setLinearVelocity(score * 10, 0)
+		end
 	end
 end
 

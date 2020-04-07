@@ -71,6 +71,7 @@ local gameOverText = nil
 local highScoreText = nil
 local highScoreScoreText = nil
 local playAgainText = nil
+local pivotText = nil
 
 local GROWING_TIME = math.max(1200, 2400 - score * 100)
 
@@ -162,7 +163,7 @@ function activateCircle (circle)
 	activeCircleGroup:insert(circlePlaceholder)
 	activeCircleGroup.rotation = 35
 
-	local ROTATION_SPEED = math.min(0.1 + score / 20, 1.2)
+	local ROTATION_SPEED = math.min(0.1 + score / 20, 1.1)
 
 	group:insert(activeCircleGroup)
 	animation.to(activeCircleGroup, { rotation=-35 }, { speedScale=ROTATION_SPEED, iterations=-1, easing=easing.inOutSine, reflect=true })
@@ -226,8 +227,11 @@ function onCircleCollision (event)
 	event.target:removeEventListener('collision', onCircleCollision)
 
 	yOffset = yOffset + circles[score].y - circles[score + 1].y
-	transition.to(group, { y = yOffset, time = 600, transition=easing.outSine })
-	transition.to(physicsBackground, { y = -yOffset, time = 600, transition=easing.outSine })
+	transition.to(group, { y=yOffset, time=600, transition=easing.outSine })
+	transition.to(physicsBackground, { y=-yOffset, time=600, transition=easing.outSine })
+
+	animation.to(scoreText, { xScale=1.2, yScale=1.2 }, { time=100, iterations=2, reflect=true })
+
 	score = score + 1
 	scoreText.text = score - 1
 
@@ -350,6 +354,7 @@ function gameOver ()
 end
 
 function initGame ()
+	animation.to(playAgainText, { xScale=1.1, yScale=1.1 }, { time=70, iterations=2, reflect=true })
 	while group.numChildren > 0 do
 		local child = group[1]
 		if child then child:removeSelf() end
@@ -380,8 +385,11 @@ function initGame ()
 	activateCircle(circles[score])
 
 	transition.fadeOut(gameOverGroup, { time = 500 })
+
 	timer.performWithDelay(500, function () transition.fadeIn(group, { time=1000 }) end)
 	timer.performWithDelay(500, function () transition.fadeIn(ammoGroup, { time=1000 }) end)
+	timer.performWithDelay(500, function () transition.fadeIn(scoreText, { time=1000 }) end)
+
 	transition.to(background.fill, { r = 169/255, g = 1, b = 172/255, a = 1, time=1000, transition=easing.inCubic })
 	highScoreText.alpha = 0
 end
@@ -417,23 +425,24 @@ function scene:create( event )
 	background:setFillColor(169/255, 253/255, 172/255)
 	sceneGroup:insert(background)
 
-	scoreText = display.newText('0', W / 2, 60, native.systemFont, 40)
+	pivotText = display.newText('PIVOT', W/2, H/2 - 5, "VacationPostcardNF", 80)
+	pivotText:setFillColor(black)
+	pivotText.alpha = 0
+	transition.to(pivotText, { y=H/2-20, alpha=1, easing=easing.outCubic, time=300})
+
+	scoreText = display.newText('0', W / 2, 60, "VacationPostcardNF", 60)
 	scoreText:setFillColor(black)
 
-	gameOverText = display.newText('0', W / 2, 200, native.systemFont, 40)
-	gameOverText.text = 'GAME OVER'
+	gameOverText = display.newText('GAME OVER', W / 2, 200, "VacationPostcardNF", 60)
 	gameOverText:setFillColor(black)
 
-	highScoreText = display.newText('0', W / 2, 130, native.systemFont, 30)
-	highScoreText.text = 'HIGH SCORE!'
+	highScoreText = display.newText('HIGH SCORE!', W / 2, 130, "VacationPostcardNF", 50)
 	highScoreText:setFillColor(0, 156/255, 234/255)
 
-	highScoreScoreText = display.newText('0', W / 2, H - 130, native.systemFont, 30)
-	highScoreScoreText.text = 'High Score: ' .. highScore
+	highScoreScoreText = display.newText('High Score: ' .. highScore, W / 2, H - 130, "VacationPostcardNF", 40)
 	highScoreScoreText:setFillColor(0, 156/255, 234/255)
 
-	playAgainText = display.newText('0', W / 2, H - 60, native.systemFont, 30)
-	playAgainText.text = 'Play Again'
+	playAgainText = display.newText('Play Again', W / 2, H - 60, "VacationPostcardNF", 50)
 	playAgainText:setFillColor(black)
 
 	gameOverGroup:insert(gameOverText)
@@ -442,8 +451,13 @@ function scene:create( event )
 	gameOverGroup:insert(playAgainText)
 
 	gameOverGroup.alpha = 0
+	scoreText.alpha = 0
 
-	initGame()
+	group.alpha = 0
+	ammoGroup.alpha = 0
+
+	timer.performWithDelay(2300, function () transition.to(pivotText, { alpha = 0 }) end)
+	timer.performWithDelay(2500, initGame)
 end
 
 Runtime:addEventListener('enterFrame', everyFrame)

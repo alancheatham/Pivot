@@ -28,6 +28,7 @@ local H = display.contentHeight
 -- persistent data
 local saveData
 local highScore
+local audioState
 
 local filePath = system.pathForFile("saveData.json", system.DocumentsDirectory)
 local file = io.open( filePath, "r" )
@@ -39,10 +40,11 @@ if file then
 end
 
 if ( saveData == nil ) then
-	saveData = { highScore = 0 }
+	saveData = { highScore = 0, audioState = true }
 end
 
 highScore = saveData.highScore
+audioState = saveData.audioState
 
 --------------------------------------------
 
@@ -72,6 +74,8 @@ local highScoreText = nil
 local highScoreScoreText = nil
 local playAgainText = nil
 local pivotText = nil
+
+local audioOn, audioOff
 
 local GROWING_TIME = math.max(1200, 2400 - score * 100)
 
@@ -307,6 +311,34 @@ local function onScreenTouch ( event )
 	return true
 end
 
+local function toggleAudio(event)
+	if event.phase == "began" then
+		audioState = not audioState
+
+		audioOff.isVisible = not audioState
+		audioOn.isVisible = audioState
+
+		if audioState then
+			audio.setVolume( 1, {channel=1} )
+			audio.setVolume( 1, {channel=2} )
+		else
+			audio.setVolume( 0, {channel=1} )
+			audio.setVolume( 0, {channel=2} )
+		end
+
+		local file = io.open( filePath, "w" )
+		saveData.audioState = audioState
+
+		if file then
+			file:write( json.encode( saveData ) )
+			io.close( file )
+		end
+
+		return true
+	end
+end
+
+
 
 -- for detecting when lasers leave the screen
 function createPhysicsBackground ()
@@ -458,6 +490,30 @@ function scene:create( event )
 
 	timer.performWithDelay(2300, function () transition.to(pivotText, { alpha = 0 }) end)
 	timer.performWithDelay(2500, initGame)
+
+
+	audioOn = display.newImage('audio-on.png')
+	audioOn.width = 30; audioOn.height = 30; audioOn.x = W-40; audioOn.y = 60
+	audioOn:toFront()
+
+	audioOff = display.newImage('audio-off.png')
+	audioOff.width = 30; audioOff.height = 30; audioOff.x = W-40; audioOff.y = 60
+	audioOff:toFront()
+
+	audioOff.isVisible = not audioState
+	audioOn.isVisible = audioState
+
+	local backgroundMusic = audio.loadStream('Pivot.mp3')
+
+	local backgroundMusicChannel = audio.play(backgroundMusic, { channel=1, loops=-1 })
+
+	if (not audioState) then
+		audio.setVolume(0, { channel=1 })
+		audio.setVolume(0, { channel=2 })
+	end
+
+	audioOn:addEventListener( "touch", toggleAudio)
+	audioOff:addEventListener( "touch", toggleAudio)
 end
 
 Runtime:addEventListener('enterFrame', everyFrame)

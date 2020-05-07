@@ -1,9 +1,46 @@
 
 -----------------------------------------------------------------------------------------
 --
--- menu.lua
+-- game.lua
 --
 -----------------------------------------------------------------------------------------
+local function screenshot()
+
+	--I set the filename to be "widthxheight_time.png"
+	--e.g. "1920x1080_20140923151732.png"
+	local date = os.date( "*t" )
+	local timeStamp = table.concat({date.year .. date.month .. date.day .. date.hour .. date.min .. date.sec})
+	local fname = display.pixelWidth.."x"..display.pixelHeight.."_"..timeStamp..".png"
+
+	--capture screen
+	local capture = display.captureScreen(false)
+
+	--make sure image is right in the center of the screen
+	capture.x, capture.y = display.contentWidth * 0.5, display.contentHeight * 0.5
+
+	--save the image and then remove
+	local function save()
+		display.save( capture, { filename=fname, baseDir=system.DocumentsDirectory, isFullResolution=true } )
+		capture:removeSelf()
+		capture = nil
+	end
+	timer.performWithDelay( 100, save, 1)
+
+	return true
+end
+
+--works in simulator too
+local function onKeyEvent(event)
+	if event.phase == "up" then
+		--press s key to take screenshot which matches resolution of the device
+    	    if event.keyName == "s" then
+    		screenshot()
+    	    end
+        end
+end
+
+Runtime:addEventListener("key", onKeyEvent)
+
 
 local composer = require( "composer" )
 local json = require('json')
@@ -16,8 +53,6 @@ physics.setGravity(0, 0)
 -- physics.setDrawMode('hybrid')
 
 local animation = require("plugin.animation")
-local explosion = system.pathForFile('explosion.json', system.DocumentsDirectory)
-local t = json.decodeFile(explosion)
 
 -- Global device specific coordinates
 local W = display.contentWidth
@@ -29,6 +64,9 @@ local H = display.contentHeight
 local saveData
 local highScore
 local audioState
+local paid
+local gold
+local firstTime = false
 
 local filePath = system.pathForFile("saveData.json", system.DocumentsDirectory)
 local file = io.open( filePath, "r" )
@@ -40,11 +78,95 @@ if file then
 end
 
 if ( saveData == nil ) then
-	saveData = { highScore = 0, audioState = true }
+	firstTime = true
+	saveData = {
+		highScore = 0,
+		audioState = true,
+		paid = false,
+		gold = false
+	}
 end
 
 highScore = saveData.highScore
 audioState = saveData.audioState
+paid = saveData.paid
+gold = saveData.gold
+
+--------------------------------------------
+-- in app purchase
+
+local store
+local targetAppStore = system.getInfo( "targetAppStore" )
+
+if ( "apple" == targetAppStore ) then  -- iOS
+    store = require( "store" )
+elseif ( "google" == targetAppStore ) then  -- Android
+    store = require( "plugin.google.iap.v3" )
+elseif ( "amazon" == targetAppStore ) then  -- Amazon
+    store = require( "plugin.amazon.iap" )
+else
+    print( "In-app purchases are not available for this platform." )
+end
+
+local productIdentifiers = {
+    "pivot.gold"
+}
+
+local function productListener( event )
+	for i = 1,#event.products do
+        print( event.products[i].productIdentifier )
+    end
+end
+
+local function transactionListener( event )
+	local transaction = event.transaction
+
+	-- print ('transaction listener', event.transaction, event.name)
+
+	-- Google IAP initialization event
+    if ( event.name == "init" ) then
+        if not ( transaction.isError ) then
+			-- Perform steps to enable IAP, load products, etc.
+			store.loadProducts( productIdentifiers, productListener )
+
+        else  -- Unsuccessful initialization; output error details
+            -- print( transaction.errorType )
+            -- print( transaction.errorString )
+		end
+
+    -- Store transaction event
+	elseif ( event.name == "storeTransaction" ) then
+
+        if not ( transaction.state == "failed" ) then  -- Successful transaction
+            -- print( json.prettify( event ) )
+			-- print( "transaction: " .. json.prettify( transaction ) )
+
+			activateGold()
+        else  -- Unsuccessful transaction; output error details
+			-- print( transaction.errorType )
+			if (transaction.errorType == 7) then
+				-- user already bought gold
+				activateGold()
+			end
+            -- print( transaction.errorString )
+		end
+
+		store.finishTransaction(transaction)
+	end
+end
+
+if (store) then
+	store.init( transactionListener )
+
+	if (firstTime) then
+		store.restore()
+	end
+end
+
+-- Load store products; store must be properly initialized by this point!
+if (store and targetAppStore == "apple") then
+	store.loadProducts( productIdentifiers, productListener )
+end
 
 --------------------------------------------
 
@@ -73,11 +195,62 @@ local gameOverText = nil
 local highScoreText = nil
 local highScoreScoreText = nil
 local playAgainText = nil
+local goldText = nil
 local pivotText = nil
 
+local backgroundMusic
 local audioOn, audioOff
 
 local GROWING_TIME = math.max(1200, 2400 - score * 100)
+
+function buyGold (event)
+	if (store and event.phase == "began") then
+		store.purchase( 'pivot.gold' )
+	end
+end
+
+function activateGold ()
+	local file = io.open( filePath, "w" )
+	paid = true
+	saveData.paid = true
+
+	if file then
+		file:write( json.encode( saveData ) )
+		io.close( file )
+	end
+
+	goldText.text = 'Gold Skin Activated'
+	gold = true
+	goldText:removeEventListener('touch', buyGold)
+end
+
+function goldClicked (event)
+	if (event.phase == "began") then
+		if (not paid) then
+			buyGold({ phase="began" }) -- lol
+		elseif gold then
+			gold = false
+			goldText.text = 'Gold Skin'
+		else
+			gold = true
+			goldText.text = 'Gold Skin Activated'
+		end
+		local file = io.open( filePath, "w" )
+
+		saveData.gold = gold
+
+		if file then
+			file:write( json.encode( saveData ) )
+			io.close( file )
+		end
+	end
+end
+
+local function disposeSound( event )
+    audio.stop( 1 )
+    audio.dispose( backgroundMusic )
+    backgroundMusic = nil
+end
 
 function addPhysics (circle)
 	physics.addBody(circle, 'dynamic')
@@ -104,8 +277,8 @@ function drawCircle (y, firstCircle)
 
     local circle = display.newCircle(W * x, y, 30)
 	circle.strokeWidth = 5
-	circle:setStrokeColor(0, 0, 0)
 	circle:setFillColor(0, 156/255, 234/255)
+	circle:setStrokeColor(0, 0, 0)
 
 	group:insert(circle)
 	isGrowing = true
@@ -148,9 +321,14 @@ end
 
 function activateCircle (circle)
 	cannon = display.newRoundedRect(circle.x, circle.y, 18, 30, 3)
-	cannon:setFillColor(0, 156/255, 234/255)
 	cannon.strokeWidth = 5
-	cannon:setStrokeColor(0, 0, 0)
+	cannon:setFillColor(0, 156/255, 234/255)
+
+	if (gold) then
+		cannon:setStrokeColor(253/255, 205/255, 0)
+	else
+		cannon:setStrokeColor(0, 0, 0)
+	end
 
 	local circlePlaceholder = display.newRect(circle.x, circle.y, 100, 100)
 	circlePlaceholder.alpha = 0
@@ -167,12 +345,15 @@ function activateCircle (circle)
 	activeCircleGroup:insert(circlePlaceholder)
 	activeCircleGroup.rotation = 35
 
-	local ROTATION_SPEED = math.min(0.1 + score / 20, 1.1)
+	local ROTATION_SPEED = math.min(0.06 + score / 25, 1.1)
 
 	group:insert(activeCircleGroup)
 	animation.to(activeCircleGroup, { rotation=-35 }, { speedScale=ROTATION_SPEED, iterations=-1, easing=easing.inOutSine, reflect=true })
 	animation.to(laser, { rotation=-35 }, { speedScale=ROTATION_SPEED, iterations=-1, easing=easing.inOutSine, reflect=true })
 
+	if (gold) then
+		transition.to(circle.stroke, { r=253/255, g=205/255, b=0, a=1, time=600, transition=easing.inCubic })
+	end
 	transition.to(circle.fill, { r=0, g=156/255, b=234/255, a=1, time=600, transition=easing.inCubic })
 	slowCannonAnimation = animation.to(cannon, { y=cannon.y - 27 }, { time=800 })
 end
@@ -285,9 +466,6 @@ function shootBullet ()
 
 	group:insert(bullet)
 	bullet:toBack()
-	-- background:toBack()
-
-	-- display.newEmitter(t)
 
 	physics.addBody(bullet, 'dynamic', { isSensor = true })
 
@@ -319,11 +497,9 @@ local function toggleAudio(event)
 		audioOn.isVisible = audioState
 
 		if audioState then
-			audio.setVolume( 1, {channel=1} )
-			audio.setVolume( 1, {channel=2} )
+			audio.fade({channel=1, time=1000, volume=1.0})
 		else
-			audio.setVolume( 0, {channel=1} )
-			audio.setVolume( 0, {channel=2} )
+			audio.setVolume( 0.0, {channel=1} )
 		end
 
 		local file = io.open( filePath, "w" )
@@ -337,8 +513,6 @@ local function toggleAudio(event)
 		return true
 	end
 end
-
-
 
 -- for detecting when lasers leave the screen
 function createPhysicsBackground ()
@@ -472,10 +646,20 @@ function scene:create( event )
 	highScoreText:setFillColor(0, 156/255, 234/255)
 
 	highScoreScoreText = display.newText('High Score: ' .. highScore, W / 2, H - 130, "VacationPostcardNF", 40)
-	highScoreScoreText:setFillColor(0, 156/255, 234/255)
+	highScoreScoreText:setFillColor(black)
 
 	playAgainText = display.newText('Play Again', W / 2, H - 60, "VacationPostcardNF", 50)
 	playAgainText:setFillColor(black)
+
+	goldText = display.newText('Gold Skin Activated', W / 2, H - 190, "VacationPostcardNF", 20)
+	goldText:setFillColor(black)
+	gameOverGroup:insert(goldText)
+
+	goldText:addEventListener('touch', goldClicked)
+
+	if (not gold) then
+		goldText.text = 'Gold Skin'
+	end
 
 	gameOverGroup:insert(gameOverText)
 	gameOverGroup:insert(highScoreText)
@@ -490,30 +674,6 @@ function scene:create( event )
 
 	timer.performWithDelay(2300, function () transition.to(pivotText, { alpha = 0 }) end)
 	timer.performWithDelay(2500, initGame)
-
-
-	audioOn = display.newImage('audio-on.png')
-	audioOn.width = 30; audioOn.height = 30; audioOn.x = W-40; audioOn.y = 60
-	audioOn:toFront()
-
-	audioOff = display.newImage('audio-off.png')
-	audioOff.width = 30; audioOff.height = 30; audioOff.x = W-40; audioOff.y = 60
-	audioOff:toFront()
-
-	audioOff.isVisible = not audioState
-	audioOn.isVisible = audioState
-
-	local backgroundMusic = audio.loadStream('Pivot.mp3')
-
-	local backgroundMusicChannel = audio.play(backgroundMusic, { channel=1, loops=-1 })
-
-	if (not audioState) then
-		audio.setVolume(0, { channel=1 })
-		audio.setVolume(0, { channel=2 })
-	end
-
-	audioOn:addEventListener( "touch", toggleAudio)
-	audioOff:addEventListener( "touch", toggleAudio)
 end
 
 Runtime:addEventListener('enterFrame', everyFrame)
@@ -529,7 +689,32 @@ function scene:show( event )
 		--
 		-- INSERT code here to make the scene come alive
         -- e.g. start timers, begin animation, play audio, etc.
+		audioOn = display.newImage('audio-on.png')
+		audioOn.width = 30; audioOn.height = 30; audioOn.x = W-40; audioOn.y = 60
+		audioOn:toFront()
 
+		audioOff = display.newImage('audio-off.png')
+		audioOff.width = 30; audioOff.height = 30; audioOff.x = W-40; audioOff.y = 60
+		audioOff:toFront()
+
+		audioOff.isVisible = not audioState
+		audioOn.isVisible = audioState
+
+		backgroundMusic = audio.loadStream('Pivot.mp3')
+
+		if (not audio.isChannelPlaying(1)) then
+			backgroundMusicChannel = audio.play(backgroundMusic, { channel=1, loops=-1, onComplete=disposeSound })
+			audio.resume()
+
+			if audioState then
+				audio.fade({channel=1, time=1000, volume=1.0})
+			else
+				audio.setVolume(0.0, {channel = 1})
+			end
+		end
+
+		audioOn:addEventListener( "touch", toggleAudio)
+		audioOff:addEventListener( "touch", toggleAudio)
 	end
 end
 

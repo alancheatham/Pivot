@@ -5,6 +5,10 @@
 
 settings =
 {
+	splashScreen =
+	{
+		enable = false
+	},
 	orientation =
 	{
 		-- Supported values for orientation:
@@ -21,6 +25,7 @@ settings =
 		usesPermissions =
 		{
 			"android.permission.INTERNET",
+			"com.android.vending.BILLING",
 		},
 	},
 
@@ -43,6 +48,10 @@ settings =
 	plugins =
 	{
 		["plugin.animation"] =
+        {
+            publisherId = "com.coronalabs"
+        },
+		["plugin.google.iap.v3"] =
         {
             publisherId = "com.coronalabs"
         },

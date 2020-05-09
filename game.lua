@@ -137,7 +137,7 @@ local function transactionListener( event )
     -- Store transaction event
 	elseif ( event.name == "storeTransaction" ) then
 
-        if not ( transaction.state == "failed" ) then  -- Successful transaction
+        if ( transaction.state == "purchased" or transaction.state == "restored" ) then  -- Successful transaction
             -- print( json.prettify( event ) )
 			-- print( "transaction: " .. json.prettify( transaction ) )
 
@@ -157,10 +157,6 @@ end
 
 if (store) then
 	store.init( transactionListener )
-
-	if (firstTime) then
-		store.restore()
-	end
 end
 
 -- Load store products; store must be properly initialized by this point!
@@ -200,6 +196,8 @@ local pivotText = nil
 
 local backgroundMusic
 local audioOn, audioOff
+local settings, settingsBackground, settingsOpen, settingsScrim
+local restorePurchaseText
 
 local GROWING_TIME = math.max(1200, 2400 - score * 100)
 
@@ -210,6 +208,7 @@ function buyGold (event)
 end
 
 function activateGold ()
+	print('activating gold')
 	local file = io.open( filePath, "w" )
 	paid = true
 	saveData.paid = true
@@ -222,6 +221,10 @@ function activateGold ()
 	goldText.text = 'Gold Skin Activated'
 	gold = true
 	goldText:removeEventListener('touch', buyGold)
+
+	if (cannon) then
+		setGoldCannon()
+	end
 end
 
 function goldClicked (event)
@@ -319,13 +322,18 @@ function drawLaser (circle)
 	group:insert(laser)
 end
 
+function setGoldCannon ()
+	cannon:setStrokeColor(253/255, 205/255, 0)
+	transition.to(circles[score].stroke, { r=253/255, g=205/255, b=0, a=1, time=600, transition=easing.inCubic })
+end
+
 function activateCircle (circle)
 	cannon = display.newRoundedRect(circle.x, circle.y, 18, 30, 3)
 	cannon.strokeWidth = 5
 	cannon:setFillColor(0, 156/255, 234/255)
 
 	if (gold) then
-		cannon:setStrokeColor(253/255, 205/255, 0)
+		setGoldCannon()
 	else
 		cannon:setStrokeColor(0, 0, 0)
 	end
@@ -351,9 +359,6 @@ function activateCircle (circle)
 	animation.to(activeCircleGroup, { rotation=-35 }, { speedScale=ROTATION_SPEED, iterations=-1, easing=easing.inOutSine, reflect=true })
 	animation.to(laser, { rotation=-35 }, { speedScale=ROTATION_SPEED, iterations=-1, easing=easing.inOutSine, reflect=true })
 
-	if (gold) then
-		transition.to(circle.stroke, { r=253/255, g=205/255, b=0, a=1, time=600, transition=easing.inCubic })
-	end
 	transition.to(circle.fill, { r=0, g=156/255, b=234/255, a=1, time=600, transition=easing.inCubic })
 	slowCannonAnimation = animation.to(cannon, { y=cannon.y - 27 }, { time=800 })
 end
@@ -510,8 +515,49 @@ local function toggleAudio(event)
 			io.close( file )
 		end
 
-		return true
 	end
+
+	return true
+end
+
+function openSettings (event)
+	if event.phase == 'began' then
+		if (settingsOpen) then
+			closeSettings({ phase = 'ended' })
+			return true
+		end
+
+		settingsBackground:setFillColor((169 + score * 2) / 255, (255 - score * 4) / 255, (172 - score * 4) / 255)
+		settingsBackground.alpha = 1
+
+		audioOff.isVisible = not audioState
+		audioOn.isVisible = audioState
+		restorePurchaseText.isVisible = true
+
+		settingsOpen = true
+		settingsScrim:addEventListener('touch', closeSettings)
+
+		if (store) then
+			restorePurchaseText:addEventListener('touch', store.restore)
+		end
+	end
+	return true
+end
+
+function closeSettings (event)
+	if event.phase == 'ended' then
+		settingsBackground.alpha = 0
+		audioOff.isVisible = false
+		audioOn.isVisible = false
+		restorePurchaseText.isVisible = false
+
+		settingsOpen = false
+		settingsScrim:removeEventListener('touch', closeSettings)
+		if (store) then
+			restorePurchaseText:removeEventListener('touch', store.restore)
+		end
+	end
+	return true
 end
 
 -- for detecting when lasers leave the screen
@@ -688,17 +734,34 @@ function scene:show( event )
 		-- Called when the scene is now on screen
 		--
 		-- INSERT code here to make the scene come alive
-        -- e.g. start timers, begin animation, play audio, etc.
+		-- e.g. start timers, begin animation, play audio, etc.
+
+		settingsScrim = display.newRect(W / 2, H / 2, W, H)
+		settingsScrim.alpha = 0.01
+
+		settings = display.newImage('settings.png')
+		settings.width = 30; settings.height = 30; settings.x = W-40; settings.y = 60
+
+		settingsBackground = display.newRoundedRect(W / 2, H / 2, 200, 200, 20)
+		settingsBackground.strokeWidth = 5
+		settingsBackground:setStrokeColor(0, 0, 0)
+		settingsBackground.alpha = 0
+
 		audioOn = display.newImage('audio-on.png')
-		audioOn.width = 30; audioOn.height = 30; audioOn.x = W-40; audioOn.y = 60
-		audioOn:toFront()
+		audioOn.width = 30; audioOn.height = 30; audioOn.x = W / 2; audioOn.y = H / 2 - 40
 
 		audioOff = display.newImage('audio-off.png')
-		audioOff.width = 30; audioOff.height = 30; audioOff.x = W-40; audioOff.y = 60
-		audioOff:toFront()
+		audioOff.width = 30; audioOff.height = 30; audioOff.x = W / 2; audioOff.y = H / 2 - 40
 
-		audioOff.isVisible = not audioState
-		audioOn.isVisible = audioState
+		audioOn:addEventListener( "touch", toggleAudio)
+		audioOff:addEventListener( "touch", toggleAudio)
+
+		audioOn.isVisible = false
+		audioOff.isVisible = false
+
+		restorePurchaseText = display.newText('RESTORE PURCHASE', W / 2, H / 2 + 40, "VacationPostcardNF", 20)
+		restorePurchaseText:setFillColor(black)
+		restorePurchaseText.isVisible = false
 
 		backgroundMusic = audio.loadStream('Pivot.mp3')
 
@@ -713,8 +776,7 @@ function scene:show( event )
 			end
 		end
 
-		audioOn:addEventListener( "touch", toggleAudio)
-		audioOff:addEventListener( "touch", toggleAudio)
+		settings:addEventListener( "touch", openSettings)
 	end
 end
 

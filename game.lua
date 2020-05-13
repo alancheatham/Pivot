@@ -179,6 +179,7 @@ local partialAmmo = 0
 local isGrowing = false
 local circles = {}
 local laser = nil
+local bullet = nil
 local cannon = nil
 local partialAmmoRect
 local cannonAnimation = nil
@@ -353,7 +354,7 @@ function activateCircle (circle)
 	activeCircleGroup:insert(circlePlaceholder)
 	activeCircleGroup.rotation = 35
 
-	local ROTATION_SPEED = math.min(0.06 + score / 25, 1.1)
+	local ROTATION_SPEED = math.min(0.06 + score / 33, 1.1)
 
 	group:insert(activeCircleGroup)
 	animation.to(activeCircleGroup, { rotation=-35 }, { speedScale=ROTATION_SPEED, iterations=-1, easing=easing.inOutSine, reflect=true })
@@ -436,6 +437,8 @@ end
 function onBulletCollision (event)
 	if (event.other == physicsBackground and event.phase == 'ended') then
 		bulletFlying = false
+		bullet:removeSelf()
+		bullet = nil
 		ammo = ammo - 1
 
 		if (ammo < 1) then
@@ -462,7 +465,7 @@ end
 
 function shootBullet ()
 	local x, y = circles[score]:localToContent(0,0)
-	local bullet = display.newRoundedRect(x, y - yOffset, 10, 50, 10)
+	bullet = display.newRoundedRect(x, y - yOffset, 10, 50, 10)
 
 	bullet:setFillColor(0, 156/255, 234/255)
 
@@ -490,6 +493,8 @@ local function onScreenTouch ( event )
 	if ( event.phase == "began" and not bulletFlying) then
 		animateCannon()
 		shootBullet()
+		-- timer.performWithDelay(50, shootBullet)
+		-- timer.performWithDelay(100, shootBullet)
 	end
 	return true
 end
@@ -587,6 +592,23 @@ function everyFrame (event)
 			partialAmmoRect:setLinearVelocity(score * 10, 0)
 		end
 	end
+
+	if (circles[score + 1] and bullet) then
+		if (not bullet.x) then return end
+
+		local bx, by = bullet:localToContent(0,0)
+		local vx, vy = bullet:getLinearVelocity()
+		local bulletSlope = -vy / vx
+		local dy = by - 130
+
+		if (bullet.x + 1 / bulletSlope * dy < circles[score + 1].x) then
+			bullet:setLinearVelocity(vx + 15, vy)
+			bullet.rotation = bullet.rotation + 1
+		else
+			bullet:setLinearVelocity(vx - 15, vy)
+			bullet.rotation = bullet.rotation - 1
+		end
+	end
 end
 
 function gameOver ()
@@ -615,7 +637,8 @@ function initGame ()
 	score = 1
 	circles = {}
 	laser = nil
-	ammo = 3
+	bullet = nil
+	ammo = 10
 	partialAmmo = 0
 	yOffset = 0
 	bulletFlying = false

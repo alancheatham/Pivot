@@ -166,6 +166,7 @@ end
 
 --------------------------------------------
 
+local sceneGroup
 local group = display.newGroup()
 local ammoGroup = display.newGroup()
 local activeCircleGroup
@@ -200,7 +201,14 @@ local audioOn, audioOff
 local settings, settingsBackground, settingsOpen, settingsScrim
 local restorePurchaseText
 
+local powerUpIcon, powerUpText
+local powerUpTimerBorder, powerUpTimerFill
+
+local POWERUP_TIME = 10000
 local GROWING_TIME = math.max(1200, 2400 - score * 100)
+
+local powerUp = nil
+local doubleMultiplier = false
 
 function buyGold (event)
 	if (store and event.phase == "began") then
@@ -319,7 +327,11 @@ function drawLaser (circle)
 	laser = display.newLine(circle.x, circle.y, circle.x, circle.y - 1000)
 	laser.strokeWidth = 2
 	laser.rotation = 35
-	laser:setStrokeColor(0, 156/255, 234/255)
+	if powerUp == 'MAGNET' then
+		laser:setStrokeColor(0, 255/255, 255/255)
+	else
+		laser:setStrokeColor(0, 156/255, 234/255)
+	end
 	group:insert(laser)
 end
 
@@ -331,7 +343,11 @@ end
 function activateCircle (circle)
 	cannon = display.newRoundedRect(circle.x, circle.y, 18, 30, 3)
 	cannon.strokeWidth = 5
-	cannon:setFillColor(0, 156/255, 234/255)
+	if powerUp == 'MAGNET' then
+		cannon:setFillColor(0, 255/255, 255/255)
+	else
+		cannon:setFillColor(0, 156/255, 234/255)
+	end
 
 	if (gold) then
 		setGoldCannon()
@@ -360,7 +376,12 @@ function activateCircle (circle)
 	animation.to(activeCircleGroup, { rotation=-35 }, { speedScale=ROTATION_SPEED, iterations=-1, easing=easing.inOutSine, reflect=true })
 	animation.to(laser, { rotation=-35 }, { speedScale=ROTATION_SPEED, iterations=-1, easing=easing.inOutSine, reflect=true })
 
-	transition.to(circle.fill, { r=0, g=156/255, b=234/255, a=1, time=600, transition=easing.inCubic })
+	if powerUp == 'MAGNET' then
+		transition.to(circle.fill, { r=0, g=255/255, b=255/255, a=1, time=600, transition=easing.inCubic })
+	else
+		transition.to(circle.fill, { r=0, g=156/255, b=234/255, a=1, time=600, transition=easing.inCubic })
+	end
+
 	slowCannonAnimation = animation.to(cannon, { y=cannon.y - 27 }, { time=800 })
 end
 
@@ -423,6 +444,10 @@ function onCircleCollision (event)
 
 	animation.to(scoreText, { xScale=1.2, yScale=1.2 }, { time=100, iterations=2, reflect=true })
 
+	if score == 1 then
+		createPowerUp()
+	end
+
 	score = score + 1
 	scoreText.text = score - 1
 
@@ -467,7 +492,11 @@ function shootBullet ()
 	local x, y = circles[score]:localToContent(0,0)
 	bullet = display.newRoundedRect(x, y - yOffset, 10, 50, 10)
 
-	bullet:setFillColor(0, 156/255, 234/255)
+	if powerUp == 'MAGNET' then
+		bullet:setFillColor(0/255, 255/255, 255/255)
+	else
+		bullet:setFillColor(0, 156/255, 234/255)
+	end
 
 	bullet.strokeWidth = 0
 	bullet:setStrokeColor(0, 0, 0)
@@ -489,12 +518,79 @@ function shootBullet ()
 	bulletFlying = true
 end
 
+function createPowerUp ()
+	powerUpIcon = display.newImage('magnet.png')
+	powerUpIcon.width = 40; powerUpIcon.height = 40;
+	powerUpIcon.x = 100
+	powerUpIcon.y = 200 - yOffset
+	group:insert(powerUpIcon)
+
+	powerUpIcon:toFront()
+	timer.performWithDelay(100, function () physics.addBody(powerUpIcon, 'dynamic', { isSensor = true }) end)
+
+	powerUpIcon:addEventListener('collision', onPowerUpCollision)
+end
+
+function endPowerUp()
+	powerUp = nil
+	powerUpIcon:removeSelf()
+
+	powerUpTimerBorder:removeSelf()
+	powerUpTimerFill:removeSelf()
+
+	transition.to(circles[score].fill, { r=0, g=156/255, b=234/255, a=1, time=600, transition=easing.inCubic })
+	transition.to(cannon.fill, { r=0, g=156/255, b=234/255, a=1, time=600, transition=easing.inCubic })
+	transition.to(laser.stroke, { r=0, g=156/255, b=234/255, a=1, time=600, transition=easing.inCubic })
+end
+
+function onPowerUpCollision (event)
+	if (event.other == physicsBackground) then return end
+
+	bulletFlying = false
+	display.remove(event.other)
+
+	local x, y = powerUpIcon:localToContent(0,0)
+
+	powerUpText = display.newText('MAGNET', x, y, "VacationPostcardNF", 30)
+	powerUpText:setFillColor(black)
+	powerUpText.alpha = 0
+	transition.to(powerUpText, { y=y-10, alpha=1, easing=easing.outCubic, time=300})
+	timer.performWithDelay(2000, function () powerUpText:removeSelf() powerUpText = nil end)
+
+	transition.to(circles[score].fill, { r=0, g=255/255, b=255/255, a=1, time=600, transition=easing.inCubic })
+	transition.to(cannon.fill, { r=0, g=255/255, b=255/255, a=1, time=600, transition=easing.inCubic })
+	transition.to(laser.stroke, { r=0, g=255/255, b=255/255, a=1, time=600, transition=easing.inCubic })
+
+	powerUp = 'MAGNET'
+
+	group:remove(powerUpIcon)
+	sceneGroup:insert(powerUpIcon)
+
+	powerUpIcon.y = y
+	transition.to(powerUpIcon, { x=W-25, y=180, time=500, transition=easing.outCubic })
+
+	powerUpTimerFill = display.newRect(W - 30, 410, 20, 200)
+	powerUpTimerFill:setFillColor(0,1,1)
+	powerUpTimerFill.anchorY = 1
+
+	powerUpTimerBorder = display.newRect(W - 30, 310, 20, 200)
+	powerUpTimerBorder:setFillColor(0,0,0,0)
+	powerUpTimerBorder:setStrokeColor(0,0,0)
+	powerUpTimerBorder.strokeWidth = 5
+
+	transition.scaleTo(powerUpTimerFill, { yScale=0.01, time=POWERUP_TIME})
+	timer.performWithDelay(POWERUP_TIME, endPowerUp)
+end
+
+
 local function onScreenTouch ( event )
 	if ( event.phase == "began" and not bulletFlying) then
 		animateCannon()
 		shootBullet()
-		-- timer.performWithDelay(50, shootBullet)
-		-- timer.performWithDelay(100, shootBullet)
+		if (burst) then
+			timer.performWithDelay(50, shootBullet)
+			timer.performWithDelay(100, shootBullet)
+		end
 	end
 	return true
 end
@@ -593,7 +689,7 @@ function everyFrame (event)
 		end
 	end
 
-	if (circles[score + 1] and bullet) then
+	if (powerUp == 'MAGNET' and bullet) then
 		if (not bullet.x) then return end
 
 		local bx, by = bullet:localToContent(0,0)
@@ -602,10 +698,10 @@ function everyFrame (event)
 		local dy = by - 130
 
 		if (bullet.x + 1 / bulletSlope * dy < circles[score + 1].x) then
-			bullet:setLinearVelocity(vx + 15, vy)
+			bullet:setLinearVelocity(vx + 20, vy)
 			bullet.rotation = bullet.rotation + 1
 		else
-			bullet:setLinearVelocity(vx - 15, vy)
+			bullet:setLinearVelocity(vx - 20, vy)
 			bullet.rotation = bullet.rotation - 1
 		end
 	end
@@ -638,10 +734,11 @@ function initGame ()
 	circles = {}
 	laser = nil
 	bullet = nil
-	ammo = 10
+	ammo = 3
 	partialAmmo = 0
 	yOffset = 0
 	bulletFlying = false
+	powerUp = nil
 
 	scoreText.text = score - 1
 
@@ -683,7 +780,7 @@ end
 --------------------------------------------
 
 function scene:create( event )
-	local sceneGroup = self.view
+	sceneGroup = self.view
 
 	-- Called when the scene's view does not exist.
 	--
@@ -703,7 +800,7 @@ function scene:create( event )
 	pivotText = display.newText('PIVOT', W/2, H/2 - 5, "VacationPostcardNF", 80)
 	pivotText:setFillColor(black)
 	pivotText.alpha = 0
-	transition.to(pivotText, { y=H/2-20, alpha=1, easing=easing.outCubic, time=300})
+	timer.performWithDelay(500, function () transition.to(pivotText, { y=H/2-20, alpha=1, easing=easing.outCubic, time=300}) end)
 
 	scoreText = display.newText('0', W / 2, 60, "VacationPostcardNF", 60)
 	scoreText:setFillColor(black)

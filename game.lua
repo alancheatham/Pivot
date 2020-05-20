@@ -187,6 +187,10 @@ local cannon = nil
 local partialAmmoRect
 local cannonAnimation = nil
 local slowCannonAnimation = nil
+local circleAnimation = nil
+local laserAnimation = nil
+local growAnimation = nil
+
 local yOffset = 0
 
 local scoreText = nil
@@ -206,7 +210,6 @@ local powerUpIcon, powerUpText
 local powerUpTimerBorder, powerUpTimerFill
 
 local POWERUP_TIME = 10000
-local GROWING_TIME = math.max(1200, 2400 - score * 100)
 
 local powerUp = nil
 local doubleMultiplier = false
@@ -297,18 +300,17 @@ function drawCircle (y, firstCircle)
 	isGrowing = true
 
 	if not firstCircle then
-		local GROWING_TIME = math.max(1500, 2400 - score * 50)
-
-		circle:setFillColor(1,0,0)
-		circle:scale(0.5, 0.5)
-		transition.scaleTo(circle, { xScale=1, yScale=1, time=GROWING_TIME })
-
 		partialAmmoRect = display.newRoundedRect(circle.x, circle.y, 8, 14, 8)
 		group:insert(partialAmmoRect)
 		partialAmmoRect:setFillColor(112/255, 207/255, 255/255)
 
-		timer.performWithDelay(100, function () addPhysics(circle) end)
-		timer.performWithDelay(GROWING_TIME, function ()
+		local GROWING_TIME = math.max(1500, 2400 - score * 35)
+
+		if powerUp == 'SLOW' then
+			GROWING_TIME = GROWING_TIME * 3
+		end
+
+		local onGrowComplete = function ()
 			if (circle == circles[score + 1]) then
 				circle:setFillColor(193/255, 71/255, 106/255)
 				isGrowing = false
@@ -317,7 +319,13 @@ function drawCircle (y, firstCircle)
 					physics.removeBody(partialAmmoRect)
 				end
 			end
-		end)
+		end
+
+		circle:setFillColor(1,0,0)
+		circle:scale(0.5, 0.5)
+		growAnimation = animation.to(circle, { xScale=1, yScale=1 }, { time=GROWING_TIME, onComplete=onGrowComplete })
+
+		timer.performWithDelay(100, function () addPhysics(circle) end)
 	end
 
 	table.insert(circles, circle)
@@ -332,6 +340,8 @@ function drawLaser (circle)
 		laser:setStrokeColor(0, 255/255, 255/255)
 	elseif powerUp == 'BURST' then
 		laser:setStrokeColor(1,0,0)
+	elseif powerUp == 'SLOW' then
+		laser:setStrokeColor(0,1,0)
 	else
 		laser:setStrokeColor(0, 156/255, 234/255)
 	end
@@ -350,6 +360,8 @@ function activateCircle (circle)
 		cannon:setFillColor(0, 255/255, 255/255)
 	elseif powerUp == 'BURST' then
 		cannon:setFillColor(1,0,0)
+	elseif powerUp == 'SLOW' then
+		cannon:setFillColor(0,1,0)
 	else
 		cannon:setFillColor(0, 156/255, 234/255)
 	end
@@ -377,19 +389,40 @@ function activateCircle (circle)
 
 	local ROTATION_SPEED = math.min(0.06 + score / 33, 1)
 
-	group:insert(activeCircleGroup)
-	animation.to(activeCircleGroup, { rotation=-35 }, { speedScale=ROTATION_SPEED, iterations=-1, easing=easing.inOutSine, reflect=true })
-	animation.to(laser, { rotation=-35 }, { speedScale=ROTATION_SPEED, iterations=-1, easing=easing.inOutSine, reflect=true })
-
 	if powerUp == 'MAGNET' then
 		transition.to(circle.fill, { r=0, g=255/255, b=255/255, a=1, time=600, transition=easing.inCubic })
 	elseif powerUp == 'BURST' then
 		transition.to(circle.fill, { r=1, g=0, b=0, a=1, time=600, transition=easing.inCubic })
+	elseif powerUp == 'SLOW' then
+		transition.to(circle.fill, { r=0, g=1, b=0, a=1, time=600, transition=easing.inCubic })
+		ROTATION_SPEED = math.min(0.06 + score / 100, 0.33)
 	else
 		transition.to(circle.fill, { r=0, g=156/255, b=234/255, a=1, time=600, transition=easing.inCubic })
 	end
 
+	group:insert(activeCircleGroup)
+	circleAnimation = animation.to(activeCircleGroup, { rotation=-35 }, { speedScale=ROTATION_SPEED, iterations=-1, easing=easing.inOutSine, reflect=true })
+	laserAnimation = animation.to(laser, { rotation=-35 }, { speedScale=ROTATION_SPEED, iterations=-1, easing=easing.inOutSine, reflect=true })
+
 	slowCannonAnimation = animation.to(cannon, { y=cannon.y - 27 }, { time=800 })
+end
+
+function activateSlow ()
+	local ROTATION_SPEED = math.min(0.06 + score / 100, 0.33)
+
+	animation.setSpeedScale(circleAnimation, ROTATION_SPEED)
+	animation.setSpeedScale(laserAnimation, ROTATION_SPEED)
+	animation.setSpeedScale(growAnimation, 0.33)
+	physics.setTimeStep(1/100)
+end
+
+function endSlow ()
+	local ROTATION_SPEED = math.min(0.06 + score / 33, 1)
+
+	animation.setSpeedScale(circleAnimation, ROTATION_SPEED)
+	animation.setSpeedScale(laserAnimation, ROTATION_SPEED)
+	animation.setSpeedScale(growAnimation, 3)
+	physics.setTimeStep(-1)
 end
 
 function removeOldCircle ()
@@ -454,7 +487,7 @@ function onCircleCollision (event)
 
 	animation.to(scoreText, { xScale=1.2, yScale=1.2 }, { time=100, iterations=2, reflect=true })
 
-	if score == 1 then
+	if score % 15 == 0 then
 		createPowerUp()
 	end
 
@@ -513,6 +546,8 @@ function shootBullet ()
 		bullet:setFillColor(0/255, 255/255, 255/255)
 	elseif powerUp == 'BURST' then
 		bullet:setFillColor(1,0,0)
+	elseif powerUp == 'SLOW' then
+		bullet:setFillColor(0,1,0)
 	else
 		bullet:setFillColor(0, 156/255, 234/255)
 	end
@@ -540,20 +575,38 @@ end
 function createPowerUp ()
 	powerUpIcon = display.newImage('magnet.png')
 	powerUpIcon.width = 40; powerUpIcon.height = 40;
-	powerUpIcon.x = 100
+
+	local x = math.random()
+	if x < 0.2 then x = 0.2 end
+	if x > 0.8 then x = 0.8 end
+
+	powerUpIcon.x = x * W
 	powerUpIcon.y = 200 - yOffset
 	group:insert(powerUpIcon)
 
 	powerUpIcon:toFront()
 	timer.performWithDelay(100, function () physics.addBody(powerUpIcon, 'dynamic', { isSensor = true }) end)
 
-	local type = 'BURST'
+	local type
+	local random = math.random(0,2)
+	if random == 0 then
+		type = 'BURST'
+	elseif random == 1 then
+		type = 'MAGNET'
+	else
+		type = 'SLOW'
+	end
+
 
 	powerUpIcon:addEventListener('collision', function (event) onPowerUpCollision(event, type) end)
 end
 
 function endPowerUp()
 	if not powerUp then return end
+
+	if powerUp == 'SLOW' then
+		endSlow()
+	end
 
 	powerUp = nil
 	powerUpIcon:removeSelf()
@@ -609,6 +662,12 @@ function onPowerUpCollision (event, type)
 		transition.to(circles[score].fill, { r=1, g=0, b=0, a=1, time=600, transition=easing.inCubic })
 		transition.to(cannon.fill, { r=1, g=0, b=0, a=1, time=600, transition=easing.inCubic })
 		transition.to(laser.stroke, { r=1, g=0, b=0, a=1, time=600, transition=easing.inCubic })
+	elseif (powerUp == 'SLOW') then
+		powerUpTimerFill:setFillColor(0,1,0)
+		transition.to(circles[score].fill, { r=0, g=1, b=0, a=1, time=600, transition=easing.inCubic })
+		transition.to(cannon.fill, { r=0, g=1, b=0, a=1, time=600, transition=easing.inCubic })
+		transition.to(laser.stroke, { r=0, g=1, b=0, a=1, time=600, transition=easing.inCubic })
+		activateSlow()
 	end
 
 	transition.scaleTo(powerUpTimerFill, { yScale=0.01, time=POWERUP_TIME})

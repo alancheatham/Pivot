@@ -166,8 +166,8 @@ end
 
 --------------------------------------------
 
-local sceneGroup
 local group = display.newGroup()
+local overlayGroup = display.newGroup()
 local ammoGroup = display.newGroup()
 local activeCircleGroup
 local gameOverGroup = display.newGroup()
@@ -181,11 +181,12 @@ local isGrowing = false
 local circles = {}
 local laser = nil
 local bullet = nil
+local bulletsFlying = 0
+local bulletHit = false
 local cannon = nil
 local partialAmmoRect
 local cannonAnimation = nil
 local slowCannonAnimation = nil
-local bulletFlying = false
 local yOffset = 0
 
 local scoreText = nil
@@ -329,6 +330,8 @@ function drawLaser (circle)
 	laser.rotation = 35
 	if powerUp == 'MAGNET' then
 		laser:setStrokeColor(0, 255/255, 255/255)
+	elseif powerUp == 'BURST' then
+		laser:setStrokeColor(1,0,0)
 	else
 		laser:setStrokeColor(0, 156/255, 234/255)
 	end
@@ -345,6 +348,8 @@ function activateCircle (circle)
 	cannon.strokeWidth = 5
 	if powerUp == 'MAGNET' then
 		cannon:setFillColor(0, 255/255, 255/255)
+	elseif powerUp == 'BURST' then
+		cannon:setFillColor(1,0,0)
 	else
 		cannon:setFillColor(0, 156/255, 234/255)
 	end
@@ -370,7 +375,7 @@ function activateCircle (circle)
 	activeCircleGroup:insert(circlePlaceholder)
 	activeCircleGroup.rotation = 35
 
-	local ROTATION_SPEED = math.min(0.06 + score / 33, 1.1)
+	local ROTATION_SPEED = math.min(0.06 + score / 33, 1)
 
 	group:insert(activeCircleGroup)
 	animation.to(activeCircleGroup, { rotation=-35 }, { speedScale=ROTATION_SPEED, iterations=-1, easing=easing.inOutSine, reflect=true })
@@ -378,6 +383,8 @@ function activateCircle (circle)
 
 	if powerUp == 'MAGNET' then
 		transition.to(circle.fill, { r=0, g=255/255, b=255/255, a=1, time=600, transition=easing.inCubic })
+	elseif powerUp == 'BURST' then
+		transition.to(circle.fill, { r=1, g=0, b=0, a=1, time=600, transition=easing.inCubic })
 	else
 		transition.to(circle.fill, { r=0, g=156/255, b=234/255, a=1, time=600, transition=easing.inCubic })
 	end
@@ -414,7 +421,10 @@ end
 function onCircleCollision (event)
 	if (event.other == physicsBackground or event.other == partialAmmoRect) then return end
 
-	timer.performWithDelay(400, function () bulletFlying = false end )
+	if bulletsFlying > 1 then
+		bulletHit = true
+	end
+	timer.performWithDelay(400, function () bulletsFlying = bulletsFlying - 1 end )
 
 	display.remove(event.other)
 	display.remove(laser)
@@ -461,15 +471,22 @@ end
 
 function onBulletCollision (event)
 	if (event.other == physicsBackground and event.phase == 'ended') then
-		bulletFlying = false
-		bullet:removeSelf()
-		bullet = nil
-		ammo = ammo - 1
+		event.target:removeSelf()
+		bulletsFlying = bulletsFlying - 1
 
-		if (ammo < 1) then
-			gameOver()
-		else
-			drawAmmo()
+		if bulletsFlying == 0 then
+			if bulletHit then
+				bulletHit = false
+			else
+				bullet = nil
+				ammo = ammo - 1
+
+				if (ammo < 1) then
+					gameOver()
+				else
+					drawAmmo()
+				end
+			end
 		end
 	end
 end
@@ -494,6 +511,8 @@ function shootBullet ()
 
 	if powerUp == 'MAGNET' then
 		bullet:setFillColor(0/255, 255/255, 255/255)
+	elseif powerUp == 'BURST' then
+		bullet:setFillColor(1,0,0)
 	else
 		bullet:setFillColor(0, 156/255, 234/255)
 	end
@@ -515,7 +534,7 @@ function shootBullet ()
 
 	bullet:addEventListener('collision', onBulletCollision)
 
-	bulletFlying = true
+	bulletsFlying = bulletsFlying + 1
 end
 
 function createPowerUp ()
@@ -528,10 +547,14 @@ function createPowerUp ()
 	powerUpIcon:toFront()
 	timer.performWithDelay(100, function () physics.addBody(powerUpIcon, 'dynamic', { isSensor = true }) end)
 
-	powerUpIcon:addEventListener('collision', onPowerUpCollision)
+	local type = 'BURST'
+
+	powerUpIcon:addEventListener('collision', function (event) onPowerUpCollision(event, type) end)
 end
 
 function endPowerUp()
+	if not powerUp then return end
+
 	powerUp = nil
 	powerUpIcon:removeSelf()
 
@@ -543,34 +566,28 @@ function endPowerUp()
 	transition.to(laser.stroke, { r=0, g=156/255, b=234/255, a=1, time=600, transition=easing.inCubic })
 end
 
-function onPowerUpCollision (event)
+function onPowerUpCollision (event, type)
 	if (event.other == physicsBackground) then return end
 
-	bulletFlying = false
+	powerUp = type
+
+	bulletsFlying = bulletsFlying - 1
 	display.remove(event.other)
 
 	local x, y = powerUpIcon:localToContent(0,0)
 
-	powerUpText = display.newText('MAGNET', x, y, "VacationPostcardNF", 30)
+	powerUpText = display.newText(powerUp, x, y, "VacationPostcardNF", 30)
 	powerUpText:setFillColor(black)
 	powerUpText.alpha = 0
 	transition.to(powerUpText, { y=y-10, alpha=1, easing=easing.outCubic, time=300})
 	timer.performWithDelay(2000, function () powerUpText:removeSelf() powerUpText = nil end)
 
-	transition.to(circles[score].fill, { r=0, g=255/255, b=255/255, a=1, time=600, transition=easing.inCubic })
-	transition.to(cannon.fill, { r=0, g=255/255, b=255/255, a=1, time=600, transition=easing.inCubic })
-	transition.to(laser.stroke, { r=0, g=255/255, b=255/255, a=1, time=600, transition=easing.inCubic })
-
-	powerUp = 'MAGNET'
-
 	group:remove(powerUpIcon)
-	sceneGroup:insert(powerUpIcon)
 
 	powerUpIcon.y = y
 	transition.to(powerUpIcon, { x=W-25, y=180, time=500, transition=easing.outCubic })
 
 	powerUpTimerFill = display.newRect(W - 30, 410, 20, 200)
-	powerUpTimerFill:setFillColor(0,1,1)
 	powerUpTimerFill.anchorY = 1
 
 	powerUpTimerBorder = display.newRect(W - 30, 310, 20, 200)
@@ -578,16 +595,32 @@ function onPowerUpCollision (event)
 	powerUpTimerBorder:setStrokeColor(0,0,0)
 	powerUpTimerBorder.strokeWidth = 5
 
+	overlayGroup:insert(powerUpIcon)
+	overlayGroup:insert(powerUpTimerFill)
+	overlayGroup:insert(powerUpTimerBorder)
+
+	if (powerUp == 'MAGNET') then
+		powerUpTimerFill:setFillColor(0,1,1)
+		transition.to(circles[score].fill, { r=0, g=255/255, b=255/255, a=1, time=600, transition=easing.inCubic })
+		transition.to(cannon.fill, { r=0, g=255/255, b=255/255, a=1, time=600, transition=easing.inCubic })
+		transition.to(laser.stroke, { r=0, g=255/255, b=255/255, a=1, time=600, transition=easing.inCubic })
+	elseif (powerUp == 'BURST') then
+		powerUpTimerFill:setFillColor(1,0,0)
+		transition.to(circles[score].fill, { r=1, g=0, b=0, a=1, time=600, transition=easing.inCubic })
+		transition.to(cannon.fill, { r=1, g=0, b=0, a=1, time=600, transition=easing.inCubic })
+		transition.to(laser.stroke, { r=1, g=0, b=0, a=1, time=600, transition=easing.inCubic })
+	end
+
 	transition.scaleTo(powerUpTimerFill, { yScale=0.01, time=POWERUP_TIME})
 	timer.performWithDelay(POWERUP_TIME, endPowerUp)
 end
 
 
 local function onScreenTouch ( event )
-	if ( event.phase == "began" and not bulletFlying) then
+	if ( event.phase == "began" and bulletsFlying == 0) then
 		animateCannon()
 		shootBullet()
-		if (burst) then
+		if (powerUp == 'BURST') then
 			timer.performWithDelay(50, shootBullet)
 			timer.performWithDelay(100, shootBullet)
 		end
@@ -615,7 +648,6 @@ local function toggleAudio(event)
 			file:write( json.encode( saveData ) )
 			io.close( file )
 		end
-
 	end
 
 	return true
@@ -716,7 +748,8 @@ function gameOver ()
 		highScoreText.alpha = 0
 	end
 
-	ammoGroup.alpha = 0
+	endPowerUp()
+	overlayGroup.alpha = 0
 	background:removeEventListener('touch', onScreenTouch)
 	transition.fadeOut(group, { time=1000 })
 	timer.performWithDelay(1000, function () transition.fadeIn(gameOverGroup, { time=600 }) end)
@@ -732,12 +765,12 @@ function initGame ()
 
 	score = 1
 	circles = {}
-	laser = nil
 	bullet = nil
+	laser = nil
 	ammo = 3
 	partialAmmo = 0
 	yOffset = 0
-	bulletFlying = false
+	bulletsFlying = 0
 	powerUp = nil
 
 	scoreText.text = score - 1
@@ -759,7 +792,7 @@ function initGame ()
 	transition.fadeOut(gameOverGroup, { time = 500 })
 
 	timer.performWithDelay(500, function () transition.fadeIn(group, { time=1000 }) end)
-	timer.performWithDelay(500, function () transition.fadeIn(ammoGroup, { time=1000 }) end)
+	timer.performWithDelay(500, function () transition.fadeIn(overlayGroup, { time=1000 }) end)
 	timer.performWithDelay(500, function () transition.fadeIn(scoreText, { time=1000 }) end)
 
 	transition.to(background.fill, { r = 169/255, g = 1, b = 172/255, a = 1, time=1000, transition=easing.inCubic })
@@ -827,6 +860,8 @@ function scene:create( event )
 		goldText.text = 'Gold Skin'
 	end
 
+	overlayGroup:insert(ammoGroup)
+
 	gameOverGroup:insert(gameOverText)
 	gameOverGroup:insert(highScoreText)
 	gameOverGroup:insert(highScoreScoreText)
@@ -836,7 +871,7 @@ function scene:create( event )
 	scoreText.alpha = 0
 
 	group.alpha = 0
-	ammoGroup.alpha = 0
+	overlayGroup.alpha = 0
 
 	timer.performWithDelay(2300, function () transition.to(pivotText, { alpha = 0 }) end)
 	timer.performWithDelay(2500, initGame)

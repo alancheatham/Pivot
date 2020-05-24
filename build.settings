@@ -55,6 +55,10 @@ settings =
         {
             publisherId = "com.coronalabs"
         },
+		["CoronaProvider.gameNetwork.apple"] =
+        {
+            publisherId = "com.coronalabs"
+        },
 	},
 
 	--

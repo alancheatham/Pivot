@@ -175,6 +175,7 @@ local gameOverGroup = display.newGroup()
 local background = nil
 local physicsBackground = nil
 local score = 1
+local displayScore = 0
 local ammo = 3
 local partialAmmo = 0
 local isGrowing = false
@@ -190,6 +191,7 @@ local slowCannonAnimation = nil
 local circleAnimation = nil
 local laserAnimation = nil
 local growAnimation = nil
+local circleScaleTransition = nil
 
 local yOffset = 0
 
@@ -200,6 +202,9 @@ local highScoreScoreText = nil
 local playAgainText = nil
 local goldText = nil
 local pivotText = nil
+local timesTwoText = nil
+local timesTwoCounter = 0
+local timesTwoBar1, timesTwoBar2, timesTwoBar3, timesTwoBar4
 
 local backgroundMusic
 local audioOn, audioOff
@@ -208,8 +213,6 @@ local restorePurchaseText
 
 local powerUpIcon, powerUpText
 local powerUpTimerBorder, powerUpTimerFill
-
-local POWERUP_TIME = 10000
 
 local powerUp = nil
 local doubleMultiplier = false
@@ -281,8 +284,12 @@ function addPhysics (circle)
 			direction = -score
 		end
 
-		circle:setLinearVelocity(direction * 10, 0)
-		partialAmmoRect:setLinearVelocity(direction * 10, 0)
+		local speedMultiplier = 10
+		-- if powerUp == 'SLOW' then
+		-- 	speedMultiplier = 3
+		-- end
+
+		setCircleSpeed(direction * speedMultiplier)
 	end
 end
 
@@ -323,6 +330,11 @@ function drawCircle (y, firstCircle)
 
 		circle:setFillColor(1,0,0)
 		circle:scale(0.5, 0.5)
+
+		if growAnimation then
+			animation.cancel(growAnimation)
+		end
+
 		growAnimation = animation.to(circle, { xScale=1, yScale=1 }, { time=GROWING_TIME, onComplete=onGrowComplete })
 
 		timer.performWithDelay(100, function () addPhysics(circle) end)
@@ -356,6 +368,12 @@ end
 function activateCircle (circle)
 	cannon = display.newRoundedRect(circle.x, circle.y, 18, 30, 3)
 	cannon.strokeWidth = 5
+
+	if circleScaleTransition then
+		transition.cancel(circleScaleTransition)
+	end
+	circleScaleTransition = transition.to(circle, { xScale=66/circle.width, yScale=66/circle.width})
+
 	if powerUp == 'MAGNET' then
 		cannon:setFillColor(0, 255/255, 255/255)
 	elseif powerUp == 'BURST' then
@@ -413,6 +431,12 @@ function activateSlow ()
 	animation.setSpeedScale(circleAnimation, ROTATION_SPEED)
 	animation.setSpeedScale(laserAnimation, ROTATION_SPEED)
 	animation.setSpeedScale(growAnimation, 0.33)
+
+	-- if circles[score + 1]:getLinearVelocity() > 0 then
+	-- 	setCircleSpeed(score * 3)
+	-- else
+	-- 	setCircleSpeed(score * -3)
+	-- end
 	physics.setTimeStep(1/100)
 end
 
@@ -422,6 +446,12 @@ function endSlow ()
 	animation.setSpeedScale(circleAnimation, ROTATION_SPEED)
 	animation.setSpeedScale(laserAnimation, ROTATION_SPEED)
 	animation.setSpeedScale(growAnimation, 3)
+
+	-- if circles[score + 1]:getLinearVelocity() > 0 then
+	-- 	setCircleSpeed(score * 10)
+	-- else
+	-- 	setCircleSpeed(score * -10)
+	-- end
 	physics.setTimeStep(-1)
 end
 
@@ -457,7 +487,8 @@ function onCircleCollision (event)
 	if bulletsFlying > 1 then
 		bulletHit = true
 	end
-	timer.performWithDelay(400, function () bulletsFlying = bulletsFlying - 1 end )
+
+	bulletsFlying = bulletsFlying - 1
 
 	display.remove(event.other)
 	display.remove(laser)
@@ -492,7 +523,23 @@ function onCircleCollision (event)
 	end
 
 	score = score + 1
-	scoreText.text = score - 1
+	displayScore = displayScore + 1
+
+	timesTwoCounter = timesTwoCounter + 1
+	if timesTwoCounter == 1 then
+		timesTwoBar1.alpha = 1
+	elseif timesTwoCounter == 2 then
+		timesTwoBar2.alpha = 1
+	elseif timesTwoCounter == 3 then
+		timesTwoBar3.alpha = 1
+	elseif timesTwoCounter == 4 then
+		timesTwoBar4.alpha = 1
+		timesTwoText.alpha = 1
+	elseif timesTwoCounter > 4 then
+		displayScore = displayScore + 1
+	end
+
+	scoreText.text = displayScore
 
 	transition.to(background.fill, { r = (169 + score * 2) / 255, g = (255 - score * 4) / 255, b = (172 - score * 4) / 255, a = 1, time=1000, transition=easing.inCubic })
 
@@ -513,6 +560,13 @@ function onBulletCollision (event)
 			else
 				bullet = nil
 				ammo = ammo - 1
+
+				timesTwoCounter = 0
+				timesTwoText.alpha = 0
+				timesTwoBar1.alpha = 0
+				timesTwoBar2.alpha = 0
+				timesTwoBar3.alpha = 0
+				timesTwoBar4.alpha = 0
 
 				if (ammo < 1) then
 					gameOver()
@@ -573,31 +627,33 @@ function shootBullet ()
 end
 
 function createPowerUp ()
-	powerUpIcon = display.newImage('magnet.png')
-	powerUpIcon.width = 40; powerUpIcon.height = 40;
-
 	local x = math.random()
 	if x < 0.2 then x = 0.2 end
 	if x > 0.8 then x = 0.8 end
 
+	local type
+
+	local random = math.random(0,2)
+	if random == 0 then
+		type = 'BURST'
+		powerUpIcon = display.newImage('burst.png')
+	elseif random == 1 then
+		type = 'MAGNET'
+		powerUpIcon = display.newImage('magnet.png')
+	else
+		type = 'SLOW'
+		powerUpIcon = display.newImage('clock.png')
+	end
+
+	powerUpIcon.width = 40; powerUpIcon.height = 40;
 	powerUpIcon.x = x * W
 	powerUpIcon.y = 200 - yOffset
 	group:insert(powerUpIcon)
 
-	powerUpIcon:toFront()
 	timer.performWithDelay(100, function () physics.addBody(powerUpIcon, 'dynamic', { isSensor = true }) end)
 
-	local type
-	local random = math.random(0,2)
-	if random == 0 then
-		type = 'BURST'
-	elseif random == 1 then
-		type = 'MAGNET'
-	else
-		type = 'SLOW'
-	end
 
-
+	powerUpIcon:toFront()
 	powerUpIcon:addEventListener('collision', function (event) onPowerUpCollision(event, type) end)
 end
 
@@ -638,7 +694,7 @@ function onPowerUpCollision (event, type)
 	group:remove(powerUpIcon)
 
 	powerUpIcon.y = y
-	transition.to(powerUpIcon, { x=W-25, y=180, time=500, transition=easing.outCubic })
+	transition.to(powerUpIcon, { x=W-30, y=180, time=500, transition=easing.outCubic })
 
 	powerUpTimerFill = display.newRect(W - 30, 410, 20, 200)
 	powerUpTimerFill.anchorY = 1
@@ -651,6 +707,8 @@ function onPowerUpCollision (event, type)
 	overlayGroup:insert(powerUpIcon)
 	overlayGroup:insert(powerUpTimerFill)
 	overlayGroup:insert(powerUpTimerBorder)
+
+	local POWERUP_TIME = 10000
 
 	if (powerUp == 'MAGNET') then
 		powerUpTimerFill:setFillColor(0,1,1)
@@ -668,9 +726,10 @@ function onPowerUpCollision (event, type)
 		transition.to(cannon.fill, { r=0, g=1, b=0, a=1, time=600, transition=easing.inCubic })
 		transition.to(laser.stroke, { r=0, g=1, b=0, a=1, time=600, transition=easing.inCubic })
 		activateSlow()
+		POWERUP_TIME = 20000
 	end
 
-	transition.scaleTo(powerUpTimerFill, { yScale=0.01, time=POWERUP_TIME})
+	animation.to(powerUpTimerFill, { yScale=0.01 }, { time=POWERUP_TIME })
 	timer.performWithDelay(POWERUP_TIME, endPowerUp)
 end
 
@@ -765,19 +824,25 @@ function createPhysicsBackground ()
 	group:insert(physicsBackground)
 end
 
+function setCircleSpeed (speed)
+	circles[score + 1]:setLinearVelocity(speed, 0)
+	if (partialAmmoRect.isBodyActive) then
+		partialAmmoRect:setLinearVelocity(speed, 0)
+	end
+end
+
 function everyFrame (event)
 	if (circles[score + 1] == nil) then return end
 
+	-- local speedMultiplier = 10
+	-- if powerUp == 'SLOW' then
+	-- 	speedMultiplier = 3
+	-- end
+
 	if (circles[score + 1].x > W - 30) then
-		circles[score + 1]:setLinearVelocity(-score * 10, 0)
-		if (partialAmmoRect.isBodyActive) then
-			partialAmmoRect:setLinearVelocity(-score * 10, 0)
-		end
+		setCircleSpeed(-score * 10)
 	elseif (circles[score + 1].x < 30) then
-		circles[score + 1]:setLinearVelocity(score * 10, 0)
-		if (partialAmmoRect.isBodyActive) then
-			partialAmmoRect:setLinearVelocity(score * 10, 0)
-		end
+		setCircleSpeed(score * 10)
 	end
 
 	if (powerUp == 'MAGNET' and bullet) then
@@ -789,10 +854,10 @@ function everyFrame (event)
 		local dy = by - 130
 
 		if (bullet.x + 1 / bulletSlope * dy < circles[score + 1].x) then
-			bullet:setLinearVelocity(vx + 20, vy)
+			bullet:setLinearVelocity(vx + 35, vy)
 			bullet.rotation = bullet.rotation + 1
 		else
-			bullet:setLinearVelocity(vx - 20, vy)
+			bullet:setLinearVelocity(vx - 35, vy)
 			bullet.rotation = bullet.rotation - 1
 		end
 	end
@@ -823,6 +888,7 @@ function initGame ()
 	end
 
 	score = 1
+	displayScore = 0
 	circles = {}
 	bullet = nil
 	laser = nil
@@ -831,8 +897,9 @@ function initGame ()
 	yOffset = 0
 	bulletsFlying = 0
 	powerUp = nil
+	timesTwoCounter = 0
 
-	scoreText.text = score - 1
+	scoreText.text = 0
 
 	group.y = 0
 
@@ -860,7 +927,7 @@ end
 
 function saveHighScore()
 	local file = io.open( filePath, "w" )
-	highScore = score - 1
+	highScore = displayScore
 	saveData.highScore = highScore
 
 	if file then
@@ -897,6 +964,25 @@ function scene:create( event )
 	scoreText = display.newText('0', W / 2, 60, "VacationPostcardNF", 60)
 	scoreText:setFillColor(black)
 
+	timesTwoText = display.newText('x2', W / 2 + 70, 60, "VacationPostcardNF", 40)
+	timesTwoText:setFillColor(black)
+	timesTwoText.alpha = 0
+
+	timesTwoBar1 = display.newRect(W / 2 + 70, 40, 50, 5)
+	timesTwoBar2 = display.newRect(W / 2 + 95, 60, 5, 45)
+	timesTwoBar3 = display.newRect(W / 2 + 70, 80, 50, 5)
+	timesTwoBar4 = display.newRect(W / 2 + 45, 60, 5, 45)
+
+	timesTwoBar1:setFillColor(0, 156/255, 234/255)
+	timesTwoBar2:setFillColor(0, 156/255, 234/255)
+	timesTwoBar3:setFillColor(0, 156/255, 234/255)
+	timesTwoBar4:setFillColor(0, 156/255, 234/255)
+
+	timesTwoBar1.alpha = 0
+	timesTwoBar2.alpha = 0
+	timesTwoBar3.alpha = 0
+	timesTwoBar4.alpha = 0
+
 	gameOverText = display.newText('GAME OVER', W / 2, 200, "VacationPostcardNF", 60)
 	gameOverText:setFillColor(black)
 
@@ -920,6 +1006,11 @@ function scene:create( event )
 	end
 
 	overlayGroup:insert(ammoGroup)
+	overlayGroup:insert(timesTwoText)
+	overlayGroup:insert(timesTwoBar1)
+	overlayGroup:insert(timesTwoBar2)
+	overlayGroup:insert(timesTwoBar3)
+	overlayGroup:insert(timesTwoBar4)
 
 	gameOverGroup:insert(gameOverText)
 	gameOverGroup:insert(highScoreText)

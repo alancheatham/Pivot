@@ -165,6 +165,77 @@ if (store and targetAppStore == "apple") then
 end
 
 --------------------------------------------
+-- Game Network
+
+local platform = system.getInfo('platform')
+
+local gameCenter = nil
+local gpgs = nil
+
+if platform == 'ios' then
+	gameCenter = require('gameNetwork')
+elseif platform == 'android' then
+	gpgs = require('plugin.gpgs.v2')
+	-- local licensing = require( "licensing" )
+
+	-- local function licensingListener( event )
+	-- 	print('license listener', event.isVerified)
+
+	-- 	if not ( event.isVerified ) then
+	-- 		-- Failed to verify app from the Google Play store; print a message
+	-- 		print( "Pirates!!!" )
+	-- 	end
+	-- end
+
+	-- local licensingInit = licensing.init( "google" )
+
+	-- if ( licensingInit == true ) then
+	-- 	licensing.verify( licensingListener )
+	-- end
+end
+
+local loggedIntoLeaderboards = false
+
+local function gcInitListener( event )
+    if ( event.type == "showSignIn" ) then
+        -- This is an opportunity to pause your game or do other things you might need to do while the Game Center Sign-In controller is up.
+    elseif ( event.data ) then
+		loggedIntoLeaderboards = true
+
+		gameCenter.request( "setHighScore", {
+			localPlayerScore = { category="pivot.leaderboard", value=saveData.highscore }
+		})
+    end
+end
+
+local function initGameCenter ()
+	gameCenter.init( "gamecenter", gcInitListener )
+end
+
+local function gpgsInitListener (event)
+	print('listener', event)
+	if event.data then  -- Successful login event
+		print('logged in', event.data)
+		loggedIntoLeaderboards = true
+    end
+end
+
+local function initGPGS ()
+	-- print('login gpgps')
+    -- gpgs.login( { userInitiated=true, listener=gpgsInitListener } )
+end
+
+-- Initialize game network based on platform
+if ( gpgs ) then
+    -- Initialize Google Play Games Services
+	initGPGS()
+elseif ( gameCenter ) then
+	-- Initialize Apple Game Center
+	initGameCenter()
+end
+
+-- Runtime:addEventListener( "system", onSystemEvent )
+--------------------------------------------
 
 local group = display.newGroup()
 local overlayGroup = display.newGroup()
@@ -224,7 +295,7 @@ function buyGold (event)
 end
 
 function activateGold ()
-	print('activating gold')
+	-- print('activating gold')
 	local file = io.open( filePath, "w" )
 	paid = true
 	saveData.paid = true
@@ -240,6 +311,29 @@ function activateGold ()
 
 	if (cannon) then
 		setGoldCannon()
+	end
+end
+
+function showLeaders (event)
+	-- print('show leaders', event)
+end
+
+function leaderboardClicked (event)
+	if event.phase == 'began' then
+		if loggedIntoLeaderboards then
+			if gameCenter then
+				print('trying to show leaderboard')
+				gameCenter.show( "leaderboards" )
+			elseif gpgs then
+				globalData.gpgs.leaderboards.show( "CgkI99_F4vITEAIQAA" )
+			end
+		else
+			if gpgs then
+				initGPGS()
+			elseif gameCenter then
+				initGameCenter()
+			end
+		end
 	end
 end
 
@@ -289,7 +383,7 @@ function addPhysics (circle)
 		-- 	speedMultiplier = 3
 		-- end
 
-		setCircleSpeed(direction * speedMultiplier)
+		setCircleSpeed(math.min(direction, 60) * speedMultiplier)
 	end
 end
 
@@ -298,7 +392,7 @@ function drawCircle (y, firstCircle)
 	if x < 0.2 then x = 0.2 end
 	if x > 0.8 then x = 0.8 end
 
-    local circle = display.newCircle(W * x, y, 30)
+    local circle = display.newCircle(W * x, y, 30 - math.max((score - 60) / 3, 0))
 	circle.strokeWidth = 5
 	circle:setFillColor(0, 156/255, 234/255)
 	circle:setStrokeColor(0, 0, 0)
@@ -319,7 +413,7 @@ function drawCircle (y, firstCircle)
 
 		local onGrowComplete = function ()
 			if (circle == circles[score + 1]) then
-				circle:setFillColor(193/255, 71/255, 106/255)
+				circle:setFillColor(167/255, 57/255, 68/255)
 				isGrowing = false
 				partialAmmoRect.alpha = 0
 				if (partialAmmoRect.isBodyActive) then
@@ -328,7 +422,7 @@ function drawCircle (y, firstCircle)
 			end
 		end
 
-		circle:setFillColor(1,0,0)
+		circle:setFillColor(193/255, 71/255, 106/255)
 		circle:scale(0.5, 0.5)
 
 		if growAnimation then
@@ -351,7 +445,7 @@ function drawLaser (circle)
 	if powerUp == 'MAGNET' then
 		laser:setStrokeColor(0, 255/255, 255/255)
 	elseif powerUp == 'BURST' then
-		laser:setStrokeColor(1,0,0)
+		laser:setStrokeColor(1,1,0)
 	elseif powerUp == 'SLOW' then
 		laser:setStrokeColor(0,1,0)
 	else
@@ -377,7 +471,7 @@ function activateCircle (circle)
 	if powerUp == 'MAGNET' then
 		cannon:setFillColor(0, 255/255, 255/255)
 	elseif powerUp == 'BURST' then
-		cannon:setFillColor(1,0,0)
+		cannon:setFillColor(1,1,0)
 	elseif powerUp == 'SLOW' then
 		cannon:setFillColor(0,1,0)
 	else
@@ -410,7 +504,7 @@ function activateCircle (circle)
 	if powerUp == 'MAGNET' then
 		transition.to(circle.fill, { r=0, g=255/255, b=255/255, a=1, time=600, transition=easing.inCubic })
 	elseif powerUp == 'BURST' then
-		transition.to(circle.fill, { r=1, g=0, b=0, a=1, time=600, transition=easing.inCubic })
+		transition.to(circle.fill, { r=1, g=255/255, b=0/255, a=1, time=600, transition=easing.inCubic })
 	elseif powerUp == 'SLOW' then
 		transition.to(circle.fill, { r=0, g=1, b=0, a=1, time=600, transition=easing.inCubic })
 		ROTATION_SPEED = math.min(0.06 + score / 100, 0.33)
@@ -488,7 +582,12 @@ function onCircleCollision (event)
 		bulletHit = true
 	end
 
-	bulletsFlying = bulletsFlying - 1
+	timer.performWithDelay(300, function ()
+		bulletsFlying = bulletsFlying - 1
+		if bulletsFlying == 0 then
+			bulletHit = false
+		end
+	end)
 
 	display.remove(event.other)
 	display.remove(laser)
@@ -516,9 +615,13 @@ function onCircleCollision (event)
 	transition.to(group, { y=yOffset, time=600, transition=easing.outSine })
 	transition.to(physicsBackground, { y=-yOffset, time=600, transition=easing.outSine })
 
-	animation.to(scoreText, { xScale=1.2, yScale=1.2 }, { time=100, iterations=2, reflect=true })
+	if timesTwoCounter < 4 then
+		animation.to(scoreText, { xScale=1.2, yScale=1.2 }, { time=100, iterations=2, reflect=true })
+	else
+		animation.to(scoreText, { xScale=1.4, yScale=1.4 }, { time=100, iterations=2, reflect=true })
+	end
 
-	if score % 15 == 0 then
+	if score % 15 == 7 then
 		createPowerUp()
 	end
 
@@ -541,9 +644,13 @@ function onCircleCollision (event)
 
 	scoreText.text = displayScore
 
-	transition.to(background.fill, { r = (169 + score * 2) / 255, g = (255 - score * 4) / 255, b = (172 - score * 4) / 255, a = 1, time=1000, transition=easing.inCubic })
+	if score < 60 then
+		transition.to(background.fill, { r = (169 + score * 2) / 255, g = (255 - score * 4) / 255, b = (172 - score * 4) / 255, a = 1, time=1000, transition=easing.inCubic })
+	else
+		transition.to(background.fill, { r = math.max((255 - (score - 60) * 3), 100) / 255, g = 0, b = 0, a = 1, time=1000, transition=easing.inCubic })
+	end
 
-	drawCircle(120 - yOffset)
+	drawCircle(H * 0.22 - yOffset)
 	drawLaser(circles[score])
 
 	activateCircle(circles[score])
@@ -599,7 +706,7 @@ function shootBullet ()
 	if powerUp == 'MAGNET' then
 		bullet:setFillColor(0/255, 255/255, 255/255)
 	elseif powerUp == 'BURST' then
-		bullet:setFillColor(1,0,0)
+		bullet:setFillColor(1,1,0)
 	elseif powerUp == 'SLOW' then
 		bullet:setFillColor(0,1,0)
 	else
@@ -647,11 +754,10 @@ function createPowerUp ()
 
 	powerUpIcon.width = 40; powerUpIcon.height = 40;
 	powerUpIcon.x = x * W
-	powerUpIcon.y = 200 - yOffset
+	powerUpIcon.y = H * 0.4 - yOffset
 	group:insert(powerUpIcon)
 
 	timer.performWithDelay(100, function () physics.addBody(powerUpIcon, 'dynamic', { isSensor = true }) end)
-
 
 	powerUpIcon:toFront()
 	powerUpIcon:addEventListener('collision', function (event) onPowerUpCollision(event, type) end)
@@ -716,10 +822,10 @@ function onPowerUpCollision (event, type)
 		transition.to(cannon.fill, { r=0, g=255/255, b=255/255, a=1, time=600, transition=easing.inCubic })
 		transition.to(laser.stroke, { r=0, g=255/255, b=255/255, a=1, time=600, transition=easing.inCubic })
 	elseif (powerUp == 'BURST') then
-		powerUpTimerFill:setFillColor(1,0,0)
-		transition.to(circles[score].fill, { r=1, g=0, b=0, a=1, time=600, transition=easing.inCubic })
-		transition.to(cannon.fill, { r=1, g=0, b=0, a=1, time=600, transition=easing.inCubic })
-		transition.to(laser.stroke, { r=1, g=0, b=0, a=1, time=600, transition=easing.inCubic })
+		powerUpTimerFill:setFillColor(1,1,0)
+		transition.to(circles[score].fill, { r=1, g=1, b=0, a=1, time=600, transition=easing.inCubic })
+		transition.to(cannon.fill, { r=1, g=1, b=0, a=1, time=600, transition=easing.inCubic })
+		transition.to(laser.stroke, { r=1, g=1, b=0, a=1, time=600, transition=easing.inCubic })
 	elseif (powerUp == 'SLOW') then
 		powerUpTimerFill:setFillColor(0,1,0)
 		transition.to(circles[score].fill, { r=0, g=1, b=0, a=1, time=600, transition=easing.inCubic })
@@ -739,8 +845,9 @@ local function onScreenTouch ( event )
 		animateCannon()
 		shootBullet()
 		if (powerUp == 'BURST') then
-			timer.performWithDelay(50, shootBullet)
-			timer.performWithDelay(100, shootBullet)
+			local bulletDelay = 50 - score * 0.4
+			timer.performWithDelay(bulletDelay, shootBullet)
+			timer.performWithDelay(bulletDelay * 2, shootBullet)
 		end
 	end
 	return true
@@ -853,18 +960,20 @@ function everyFrame (event)
 		local bulletSlope = -vy / vx
 		local dy = by - 130
 
+		local magnetStrength = 25 + (score / 5)
+
 		if (bullet.x + 1 / bulletSlope * dy < circles[score + 1].x) then
-			bullet:setLinearVelocity(vx + 35, vy)
+			bullet:setLinearVelocity(vx + magnetStrength, vy)
 			bullet.rotation = bullet.rotation + 1
 		else
-			bullet:setLinearVelocity(vx - 35, vy)
+			bullet:setLinearVelocity(vx - magnetStrength, vy)
 			bullet.rotation = bullet.rotation - 1
 		end
 	end
 end
 
 function gameOver ()
-	if (score - 1 > highScore) then
+	if (displayScore > highScore) then
 		saveHighScore()
 		highScoreText.alpha = 1
 		highScoreScoreText.text = 'High Score: ' .. highScore
@@ -904,8 +1013,8 @@ function initGame ()
 	group.y = 0
 
 	createPhysicsBackground()
-	drawCircle(H - 60, true)
-	drawCircle(130)
+	drawCircle(H * 0.9, true)
+	drawCircle(H * 0.22)
 
 	drawLaser(circles[score])
 	drawAmmo()
@@ -925,6 +1034,10 @@ function initGame ()
 	highScoreText.alpha = 0
 end
 
+function requestCallback ()
+	print('high score saved')
+end
+
 function saveHighScore()
 	local file = io.open( filePath, "w" )
 	highScore = displayScore
@@ -933,7 +1046,23 @@ function saveHighScore()
 	if file then
 		file:write( json.encode( saveData ) )
         io.close( file )
-    end
+	end
+
+	if loggedIntoLeaderboards then
+		if gameCenter then
+			gameCenter.request( "setHighScore", {
+				localPlayerScore = { category="pivot.leaderboard", value=highScore },
+				listener = requestCallback
+			})
+		elseif gpgs then
+			gpgs.leaderboards.submit(
+			{
+				leaderboardId = "CgkI99_F4vITEAIQAA",
+				score = highScore,
+				listener = requestCallback
+			})
+		end
+	end
 end
 
 --------------------------------------------
@@ -959,7 +1088,7 @@ function scene:create( event )
 	pivotText = display.newText('PIVOT', W/2, H/2 - 5, "VacationPostcardNF", 80)
 	pivotText:setFillColor(black)
 	pivotText.alpha = 0
-	timer.performWithDelay(500, function () transition.to(pivotText, { y=H/2-20, alpha=1, easing=easing.outCubic, time=300}) end)
+	timer.performWithDelay(800, function () transition.to(pivotText, { y=H/2-20, alpha=1, easing=easing.outCubic, time=300}) end)
 
 	scoreText = display.newText('0', W / 2, 60, "VacationPostcardNF", 60)
 	scoreText:setFillColor(black)
@@ -986,6 +1115,9 @@ function scene:create( event )
 	gameOverText = display.newText('GAME OVER', W / 2, 200, "VacationPostcardNF", 60)
 	gameOverText:setFillColor(black)
 
+	-- leaderboardIcon = display.newImage('leaderboard.png')
+	-- leaderboardIcon.width = 50; leaderboardIcon.height = 50; leaderboardIcon.x = W / 2; leaderboardIcon.y = H / 2
+
 	highScoreText = display.newText('HIGH SCORE!', W / 2, 130, "VacationPostcardNF", 50)
 	highScoreText:setFillColor(0, 156/255, 234/255)
 
@@ -1000,6 +1132,7 @@ function scene:create( event )
 	gameOverGroup:insert(goldText)
 
 	goldText:addEventListener('touch', goldClicked)
+	-- leaderboardIcon:addEventListener('touch', leaderboardClicked)
 
 	if (not gold) then
 		goldText.text = 'Gold Skin'
@@ -1016,6 +1149,7 @@ function scene:create( event )
 	gameOverGroup:insert(highScoreText)
 	gameOverGroup:insert(highScoreScoreText)
 	gameOverGroup:insert(playAgainText)
+	-- gameOverGroup:insert(leaderboardIcon)
 
 	gameOverGroup.alpha = 0
 	scoreText.alpha = 0

@@ -26,7 +26,9 @@ settings =
 		{
 			"android.permission.INTERNET",
 			"com.android.vending.BILLING",
+			"com.android.vending.CHECK_LICENSE"
 		},
+		googlePlayGamesAppId = "683643334647"
 	},
 
 	--
@@ -58,6 +60,11 @@ settings =
 		["CoronaProvider.gameNetwork.apple"] =
         {
             publisherId = "com.coronalabs"
+        },
+		["plugin.gpgs.v2"] =
+        {
+            publisherId = "com.coronalabs",
+            supportedPlatforms = { android=true }
         },
 	},
 

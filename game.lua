@@ -288,6 +288,8 @@ local powerUpTimerBorder, powerUpTimerFill
 local powerUp = nil
 local doubleMultiplier = false
 
+local diff = math.max((H * .9 - H * .22 - 386) / 2, 0)
+
 function buyGold (event)
 	if (store and event.phase == "began") then
 		store.purchase( 'pivot.gold' )
@@ -299,6 +301,7 @@ function activateGold ()
 	local file = io.open( filePath, "w" )
 	paid = true
 	saveData.paid = true
+	saveData.gold = true
 
 	if file then
 		file:write( json.encode( saveData ) )
@@ -650,7 +653,7 @@ function onCircleCollision (event)
 		transition.to(background.fill, { r = math.max((255 - (score - 60) * 3), 100) / 255, g = 0, b = 0, a = 1, time=1000, transition=easing.inCubic })
 	end
 
-	drawCircle(H * 0.22 - yOffset)
+	drawCircle(H * 0.22 + diff - yOffset)
 	drawLaser(circles[score])
 
 	activateCircle(circles[score])
@@ -1013,8 +1016,8 @@ function initGame ()
 	group.y = 0
 
 	createPhysicsBackground()
-	drawCircle(H * 0.9, true)
-	drawCircle(H * 0.22)
+	drawCircle(H * 0.9 - diff , true)
+	drawCircle(H * 0.22 + diff )
 
 	drawLaser(circles[score])
 	drawAmmo()
@@ -1115,8 +1118,8 @@ function scene:create( event )
 	gameOverText = display.newText('GAME OVER', W / 2, 200, "VacationPostcardNF", 60)
 	gameOverText:setFillColor(black)
 
-	-- leaderboardIcon = display.newImage('leaderboard.png')
-	-- leaderboardIcon.width = 50; leaderboardIcon.height = 50; leaderboardIcon.x = W / 2; leaderboardIcon.y = H / 2
+	leaderboardIcon = display.newImage('leaderboard.png')
+	leaderboardIcon.width = 50; leaderboardIcon.height = 50; leaderboardIcon.x = W / 2; leaderboardIcon.y = H / 2
 
 	highScoreText = display.newText('HIGH SCORE!', W / 2, 130, "VacationPostcardNF", 50)
 	highScoreText:setFillColor(0, 156/255, 234/255)
@@ -1132,7 +1135,7 @@ function scene:create( event )
 	gameOverGroup:insert(goldText)
 
 	goldText:addEventListener('touch', goldClicked)
-	-- leaderboardIcon:addEventListener('touch', leaderboardClicked)
+	leaderboardIcon:addEventListener('touch', leaderboardClicked)
 
 	if (not gold) then
 		goldText.text = 'Gold Skin'
@@ -1149,7 +1152,7 @@ function scene:create( event )
 	gameOverGroup:insert(highScoreText)
 	gameOverGroup:insert(highScoreScoreText)
 	gameOverGroup:insert(playAgainText)
-	-- gameOverGroup:insert(leaderboardIcon)
+	gameOverGroup:insert(leaderboardIcon)
 
 	gameOverGroup.alpha = 0
 	scoreText.alpha = 0

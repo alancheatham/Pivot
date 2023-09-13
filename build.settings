@@ -42,6 +42,9 @@ settings =
 			UIStatusBarHidden = false,
 			UILaunchStoryboardName = "LaunchScreen",
 		},
+		entitlements = {
+	    ["com.apple.developer.game-center"] = true,
+		},
 	},
 
 	--

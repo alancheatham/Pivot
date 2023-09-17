@@ -101,7 +101,7 @@ local targetAppStore = system.getInfo( "targetAppStore" )
 if ( "apple" == targetAppStore ) then  -- iOS
     store = require( "store" )
 elseif ( "google" == targetAppStore ) then  -- Android
-    store = require( "plugin.google.iap.v3" )
+    store = require( "plugin.google.iap.billing.v2" )
 elseif ( "amazon" == targetAppStore ) then  -- Amazon
     store = require( "plugin.amazon.iap" )
 else

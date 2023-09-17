@@ -56,17 +56,17 @@ settings =
         {
             publisherId = "com.coronalabs"
         },
-		["plugin.google.iap.v3"] =
+		["plugin.google.iap.billing.v2"] =
         {
-            publisherId = "com.coronalabs"
+            publisherId = "com.solar2d"
         },
 		["CoronaProvider.gameNetwork.apple"] =
         {
             publisherId = "com.coronalabs"
         },
-		["plugin.gpgs.v2"] =
+		["plugin.gpgs.v3"] =
         {
-            publisherId = "com.coronalabs",
+            publisherId = "com.solar2d",
             supportedPlatforms = { android=true }
         },
 	},

@@ -282,6 +282,7 @@ local backgroundMusic
 local audioOn, audioOff
 local settings, settingsBackground, settingsOpen, settingsScrim
 local restorePurchaseText
+local privacyPolicyText
 
 local powerUpIcon, powerUpText
 local powerUpTimerBorder, powerUpTimerFill
@@ -895,6 +896,7 @@ function openSettings (event)
 		audioOff.isVisible = not audioState
 		audioOn.isVisible = audioState
 		restorePurchaseText.isVisible = true
+		privacyPolicyText.isVisible = true
 
 		settingsOpen = true
 		settingsScrim:addEventListener('touch', closeSettings)
@@ -902,6 +904,8 @@ function openSettings (event)
 		if (store) then
 			restorePurchaseText:addEventListener('touch', store.restore)
 		end
+
+		privacyPolicyText:addEventListener('touch', openPrivacyPolicy)
 	end
 	return true
 end
@@ -912,11 +916,21 @@ function closeSettings (event)
 		audioOff.isVisible = false
 		audioOn.isVisible = false
 		restorePurchaseText.isVisible = false
+		privacyPolicyText.isVisible = false
 
 		settingsOpen = false
 		settingsScrim:removeEventListener('touch', closeSettings)
 		if (store) then
 			restorePurchaseText:removeEventListener('touch', store.restore)
+		end
+	end
+	return true
+end
+
+function openPrivacyPolicy(event)
+	if event.phase == 'ended' then
+		if (system.canOpenURL('https://alancheatham.com/privacy-policy')) then
+			system.openURL('https://alancheatham.com/privacy-policy')
 		end
 	end
 	return true
@@ -1202,9 +1216,13 @@ function scene:show( event )
 		audioOn.isVisible = false
 		audioOff.isVisible = false
 
-		restorePurchaseText = display.newText('RESTORE PURCHASE', W / 2, H / 2 + 40, "VacationPostcardNF", 20)
+		restorePurchaseText = display.newText('RESTORE PURCHASE', W / 2, H / 2 + 30, "VacationPostcardNF", 20)
 		restorePurchaseText:setFillColor(black)
 		restorePurchaseText.isVisible = false
+
+		privacyPolicyText = display.newText('PRIVACY POLICY', W / 2, H / 2 + 70, "VacationPostcardNF", 20)
+		privacyPolicyText:setFillColor(black)
+		privacyPolicyText.isVisible = false
 
 		backgroundMusic = audio.loadStream('Pivot.mp3')
 
